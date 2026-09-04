@@ -13,7 +13,7 @@ CONF=/etc/environment.d/95-gpu-mode.conf
 STATE=/var/lib/gpu-mode
 need_root(){ [ "$(id -u)" -eq 0 ] || { echo "Bitte mit sudo ausfuehren."; exit 1; }; }
 
-nv_pci(){ lspci -D -n 2>/dev/null | awk '$2 ~ /^030[02]:/ && /:10de:/ {print $1; exit}'; }
+nv_pci(){ lspci -D -n 2>/dev/null | awk '$2 ~ /^030[02]:/ && $3 ~ /^10de:/ {print $1; exit}'; }
 nv_card(){ for d in /dev/dri/by-path/pci-*-card; do
              [ -e "$d" ] || continue
              case "$d" in *"$(nv_pci)"*) echo "$d"; return;; esac
