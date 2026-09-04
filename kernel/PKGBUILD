@@ -536,8 +536,15 @@ prepare() {
         -m SERIAL_DEV_BUS -m LEDS_CLASS_MULTICOLOR
 
     # --- Radeon 780M (RDNA3 gfx1103) inkl. ROCm/HIP-Faehigkeit
+    # DRM_AMDGPU MUSS ein Modul sein (-m), nicht builtin (-e): als builtin
+    # initialisiert amdgpu, bevor das Wurzel-FS steht, und findet seine
+    # Firmware (gc_11_0_1_mes.bin u.a.) nicht -> "Fatal error during GPU init",
+    # Rueckfall auf simple-framebuffer, schwarzer Desktop. Als Modul laedt es
+    # nach dem Boot ueber udev, wenn /lib/firmware erreichbar ist. So macht es
+    # auch linux-cachyos. Die Unteroptionen (DC, HSA, USERPTR) sind bool und
+    # werden ins Modul kompiliert - die bleiben -e.
     scripts/config \
-        -e DRM_AMDGPU -e DRM_AMDGPU_USERPTR \
+        -m DRM_AMDGPU -e DRM_AMDGPU_USERPTR \
         -e DRM_AMD_DC -e DRM_AMD_DC_FP -e DRM_AMD_SECURE_DISPLAY \
         -e HSA_AMD -e HSA_AMD_SVM -e HSA_AMD_P2P \
         -e DRM_AMD_ACP -e DRM_TTM -e DRM_SCHED \
