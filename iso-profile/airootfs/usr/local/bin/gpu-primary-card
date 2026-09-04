@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Bestimmt die GPU, an der das Panel haengt, und nagelt sie als primaeres
+# DRM-Geraet fest.
+#
+# Warum das noetig ist: Aquamarine (Hyprlands Backend) nimmt das ERSTE
+# DRM-Geraet als primaeres. Welches das ist, entscheidet die Reihenfolge der
+# Geraete-Enumeration - und die ist nicht deterministisch. Auf dem Victus
+# 16-s gibt es keinen MUX: das Panel haengt fest an der 780M, die 4060 hat
+# keinen Ausgang. Wird die 4060 zuerst enumeriert, rendert Hyprland auf eine
+# Karte ohne Display -> schwarzer Bildschirm. Das trifft mal zu, mal nicht,
+# je Boot.
+#
+#   gpu-primary-card           gibt den by-path-Pfad der Display-GPU aus
+#   gpu-primary-card --write   schreibt ihn nach environment.d (fuer den
+#                              Systemstart, siehe gpu-primary.service)
+set -euo pipefail
+
+# by-path statt cardN: der Pfad haengt an der PCI-Adresse und ist stabil,
+# waehrend die cardN-Nummer selbst Teil des Problems ist.
+find_card() {
+  local c card drv
+  for c in /dev/dri/by-path/pci-*-card; do
+    [ -e "$c" ] || continue
+    card="$(basename "$(readlink -f "$c")")"
+    drv="$(basename "$(readlink -f "/sys/class/drm/$card/device/driver" 2>/dev/null)" 2>/dev/null || true)"
+    if [ "$drv" = "amdgpu" ]; then echo "$c"; return 0; fi
+  done
+  return 1
+}
+
+CARD="$(find_card || true)"
+
+if [ "${1:-}" != "--write" ]; then
+  [ -n "$CARD" ] || { echo "Keine amdgpu-Karte gefunden." >&2; exit 1; }
+  echo "$CARD"; exit 0
+fi
+
+# --- ab hier: --write, laeuft als root aus gpu-primary.service --------------
+CONF=/etc/environment.d/94-gpu-primary.conf
+
+if [ -z "$CARD" ]; then
+  # Kein amdgpu: entweder integrated-Modus ohne iGPU-Treiber oder fremde
+  # Hardware. Dann nichts festnageln - lieber Aquamarine raten lassen als
+  # auf ein Geraet zeigen, das es nicht gibt.
+  rm -f "$CONF"
+  echo "Keine amdgpu-Karte - AQ_DRM_DEVICES nicht gesetzt."
+  exit 0
+fi
+
+# 94-, damit "gpu-mode nvidia" mit seiner 95-gpu-mode.conf gewinnt:
+# environment.d liest lexikalisch, die spaetere Datei sticht.
+printf '# Automatisch erzeugt von gpu-primary.service - nicht editieren.\n' > "$CONF"
+printf 'AQ_DRM_DEVICES=%s\n' "$CARD" >> "$CONF"
+
+# greetd startet den Greeter, bevor eine User-Session existiert, und liest
+# environment.d nicht. Ohne das hier bleibt schon der Login-Bildschirm
+# schwarz. /run, damit nichts auf der Platte zurueckbleibt.
+DROPIN=/run/systemd/system/greetd.service.d
+mkdir -p "$DROPIN"
+printf '[Service]\nEnvironment=AQ_DRM_DEVICES=%s\n' "$CARD" > "$DROPIN/50-gpu-primary.conf"
+systemctl daemon-reload
+
+echo "Primaeres DRM-Geraet: $CARD"

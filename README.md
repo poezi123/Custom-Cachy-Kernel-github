@@ -43,6 +43,10 @@ Automatisches Umschalten bei Last gibt es unter Linux nicht — PRIME-Offload wi
 beim Prozessstart entschieden. Stattdessen:
 
 - Die 4060 schläft in **D3cold** (~0.5 W statt ~12 W), die 780M treibt den Desktop.
+- Das primäre DRM-Gerät wird beim Start **festgenagelt** (`gpu-primary.service`).
+  Ohne das nimmt Aquamarine irgendein Gerät — mal die 780M, mal die 4060, an der
+  mangels MUX kein Panel hängt. Ergebnis wäre ein sporadisch schwarzer Schirm.
+  Details: [`docs/verification.md`](docs/verification.md).
 - `/usr/local/lib/gpu-offload` liegt **vor** `/usr/bin` im `PATH`. Programme aus
   `/etc/gpu-offload.d/apps.list` (Steam, hashcat, Blender, …) bekommen dort einen
   Shim und starten automatisch auf der 4060 — egal ob aus dem Terminal, aus
@@ -89,6 +93,15 @@ gebaut, stirbt ein v4-Build mit SIGILL. Auf dem Laptop danach:
 sudo postinstall-8845hs   # Shims, Dienste, Gruppen, DKMS
 sudo switch-to-v4         # Userspace auf AVX-512 hochziehen
 ```
+
+## Installieren
+
+Im Live-System das Terminal öffnen (`SUPER`+`Return`) und `cachy-install`
+starten — oder im Launcher (`SUPER`+`Space`) den Eintrag
+**„CachyOS 8845HS installieren"** wählen. Beides landet im Offline-Modus.
+
+Der Install-Knopf in cachyos-hello führt zum selben Ziel, prüft aber vorher
+online die ISO-Version; das braucht Netz und ist der umständlichere Weg.
 
 ## Layout
 

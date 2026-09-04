@@ -1,0 +1,15 @@
+[Unit]
+Description=Primaeres DRM-Geraet (Display-GPU) festnageln
+Documentation=man:gpu-primary-card
+# Muss laufen, bevor irgendein Compositor startet - greetd inklusive.
+Before=greetd.service display-manager.service graphical.target
+After=systemd-udev-settle.service
+Wants=systemd-udev-settle.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/gpu-primary-card --write
+
+[Install]
+WantedBy=graphical.target

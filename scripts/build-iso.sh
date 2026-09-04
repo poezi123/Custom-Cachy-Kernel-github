@@ -35,7 +35,18 @@ docker run --rm -i \
 # --- 2) ISO bauen ---------------------------------------------------------
 # --privileged: mkarchiso braucht Loop-Devices und mount im Container.
 echo ">>> mkarchiso startet (das dauert)."
+# cachyos-hello liest /etc/version-tag und prueft es gegen
+# https://cachyos.org/versions.json. Fehlt die Datei, haelt es die ISO fuer
+# einen Testing-Build, meldet "Testing-ISOs sind nicht stabil und nicht zum
+# Verwenden geeignet" und startet den Installer gar nicht erst.
+# Upstream schreibt die Datei in util-iso.sh (generate_version_tag); unser
+# Build ruft util-iso.sh nicht auf, also hier - mit derselben Version, die
+# profiledef.sh fuer den ISO-Namen benutzt.
+ISO_VERSION="$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)"
+echo ">>> ISO-Version: $ISO_VERSION"
+
 docker run --rm -i --privileged \
+  -e ISO_VERSION="$ISO_VERSION" \
   -v "$PROFILE:/profile:ro" \
   -v "$REPO:/localrepo:ro" \
   -v "$WORK:/work" \
@@ -59,6 +70,8 @@ docker run --rm -i --privileged \
     sudo chgrp disk /dev/loop* 2>/dev/null || true
 
     sudo cp -r /profile /tmp/profile        # mkarchiso schreibt ins Profil
+    echo "$ISO_VERSION" | sudo tee /tmp/profile/airootfs/etc/version-tag >/dev/null
+    echo "desktop"      | sudo tee /tmp/profile/airootfs/etc/edition-tag >/dev/null
     sudo mkarchiso -v -w /work -o /out /tmp/profile
   '
 

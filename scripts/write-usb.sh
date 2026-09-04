@@ -99,10 +99,13 @@ echo ">>> sync ..."
 sync
 
 # --- Zurueckgelesen vergleichen --------------------------------------------
-echo ">>> Pruefe das Geschriebene ..."
+# status=progress, nicht status=none: das Ruecklesen dauert bei einem
+# USB-2.0-Stick (~23 MiB/s) rund fuenf Minuten. Ohne Fortschrittsanzeige sieht
+# das aus wie ein Absturz - genau der Eindruck ist hier schon entstanden.
+echo ">>> Pruefe das Geschriebene (liest $(numfmt --to=iec "$ISO_SIZE") zurueck) ..."
 EXPECT=$(sha256sum "$ISO" | cut -d' ' -f1)
 ACTUAL=$(sudo dd if="$DEV" bs=4M count=$(( (ISO_SIZE + 4194303) / 4194304 )) \
-         iflag=fullblock status=none | head -c "$ISO_SIZE" | sha256sum | cut -d' ' -f1)
+         iflag=fullblock status=progress | head -c "$ISO_SIZE" | sha256sum | cut -d' ' -f1)
 echo
 if [ "$EXPECT" = "$ACTUAL" ]; then
   grn "Stick geschrieben und verifiziert. Du kannst ihn abziehen."

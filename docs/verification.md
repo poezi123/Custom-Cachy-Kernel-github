@@ -68,6 +68,51 @@ Diese Regel läuft *nach* `systemd-sysctl` und gewinnt immer — alle anderen
 Werte aus derselben Datei kamen korrekt an. Die wirkungslose Zeile ist raus.
 Wer 180 will, legt `/etc/udev/rules.d/31-zram-swappiness.rules` an.
 
+## Was der erste Boot auf echter Hardware ergab
+
+Zwei Dinge, die QEMU nicht zeigen konnte, weil dort weder eine zweite GPU noch
+ein Netzwerk-Check existiert. Beide sind gefixt, beide waren echte Blocker.
+
+### Schwarzer Bildschirm, sporadisch
+
+Von drei Boots kamen zwei nicht über die Bootmeldungen hinaus — kein Hyprland,
+kein Greeter, schwarz. Der dritte lief durch. Sporadisch, nicht reproduzierbar.
+
+Ursache: Aquamarine, Hyprlands Backend, nimmt das **erste** DRM-Gerät als
+primäres. Welches das ist, entscheidet die Reihenfolge der Geräte-Enumeration,
+und die ist nicht deterministisch. Das Victus 16-s hat **keinen MUX** — das
+Panel hängt fest an der 780M, die 4060 hat keinen Ausgang. Fällt die
+Enumeration auf die 4060, rendert der Compositor auf eine Karte ohne Display.
+
+Der Hybrid-Zweig von `gpu-mode` setzte `AQ_DRM_DEVICES` bewusst nicht, mit dem
+Kommentar „Hyprland wählt selbst (amdgpu primär)". Das war eine Annahme, keine
+Messung — und sie stimmt in etwa einem von drei Boots nicht.
+
+**Fix:** `gpu-primary-card` sucht über `/dev/dri/by-path/` die Karte mit
+Treiber `amdgpu` — der by-path-Pfad hängt an der PCI-Adresse und ist stabil,
+während die `cardN`-Nummer selbst das Problem ist. `gpu-primary.service`
+schreibt sie vor `greetd.service` nach `/etc/environment.d/94-gpu-primary.conf`
+und zusätzlich als Drop-in in die greetd-Unit: der Greeter startet, bevor eine
+User-Session existiert, und liest `environment.d` nicht. Die Nummer 94 lässt
+`gpu-mode nvidia` mit seiner `95-gpu-mode.conf` weiterhin gewinnen.
+
+### Der Installer verweigerte den Start
+
+cachyos-hello meldete „Du verwendest eine alte Testing ISO, Testing-ISOs sind
+nicht stabil und nicht zum Verwenden geeignet" und startete Calamares nicht.
+
+Ursache: cachyos-hello liest `/etc/version-tag` und prüft es gegen
+`https://cachyos.org/versions.json`. Upstream schreibt die Datei in
+`util-iso.sh` (`generate_version_tag`); unser Build ruft `util-iso.sh` nicht
+auf, die Datei fehlte also komplett — und ohne Version gilt die ISO als
+Testing-Build.
+
+**Fix:** `build-iso.sh` schreibt `version-tag` und `edition-tag` in das
+Profil, bevor `mkarchiso` läuft. Unabhängig davon zeigt
+`/usr/local/bin/calamares-online.sh` — der Pfad, den cachyos-hello fest
+verdrahtet aufruft — jetzt auf den Offline-Installer statt auf den
+Online-Pfad, der das gesamte Setup verworfen hätte.
+
 ## Was ungetestet blieb
 
 NVIDIA-Modul laden, CUDA und hashcat auf der 4060, `hp-wmi`-Bindung samt
@@ -76,3 +121,7 @@ braucht es die echte Hardware, QEMU hat weder NVIDIA-GPU noch HP-Board.
 
 Die Calamares-Installation auf eine Platte habe ich nicht durchgespielt, und
 `virtualbox-host-dkms` baut erst beim ersten `postinstall-8845hs`.
+
+Auch der Fix am primären DRM-Gerät ist bislang nur hergeleitet, nicht am Gerät
+bestätigt: dass `AQ_DRM_DEVICES` gesetzt ist, lässt sich prüfen — dass damit
+alle Boots durchlaufen, zeigt erst eine Reihe von Neustarts.
