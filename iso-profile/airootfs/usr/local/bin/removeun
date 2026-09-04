@@ -46,8 +46,38 @@ _packages_to_remove=(
 #   memtest86+, edk2-shell, syslinux - Boot-/Diagnose-Faehigkeit
 #   boost-libs, yaml-cpp, doxygen, expect - harmlose Deps
 
+# Calamares' Offline-Sequenz ruft NACH diesem Skript noch drei Skripte auf, die
+# dem Calamares-Paket gehoeren, das wir hier gerade entfernen:
+#   /etc/calamares/scripts/{dmcheck,shell-setup,bootloader-post-setup}
+# (Hauptschritt "shellprocess", siehe shellprocess.conf). "pacman -Rsnc" loescht
+# sie mit, und der naechste Schritt stirbt dann mit Exit 127 -> die ganze
+# Installation bricht ab ("Externes Programm mit Fehlern beendet").
+#
+# Upstream entgeht dem nur im pacstrap-Modus: dort legt "postInstallFiles"
+# (pacstrap.conf) diese Skripte vorher als paketunabhaengige Kopien ab, die die
+# Paketentfernung ueberleben. Der Offline-Modus (unpackfs) kennt diesen Schritt
+# nicht. Also machen wir es hier selbst: wegsichern, Paket entfernen,
+# als paketfreie Dateien zuruecklegen. Calamares raeumt sie danach selbst weg.
+_detach_needed_scripts() {
+  local d=/etc/calamares/scripts s b
+  _stash="$(mktemp -d)"
+  for s in dmcheck shell-setup bootloader-post-setup; do
+    [ -f "$d/$s" ] && cp -a "$d/$s" "$_stash/$s"
+  done
+}
+_reattach_needed_scripts() {
+  local d=/etc/calamares/scripts b
+  mkdir -p "$d"
+  for b in dmcheck shell-setup bootloader-post-setup; do
+    [ -f "$_stash/$b" ] && cp -a "$_stash/$b" "$d/$b"
+  done
+  rm -rf "$_stash"
+}
+
 _clean_files
+_detach_needed_scripts
 for p in "${_packages_to_remove[@]}"; do
   pacman -Qi "$p" &>/dev/null && _remove_pacman_package "$p"
 done
+_reattach_needed_scripts
 exit 0
