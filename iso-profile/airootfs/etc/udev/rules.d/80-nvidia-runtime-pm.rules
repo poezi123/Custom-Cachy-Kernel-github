@@ -1,0 +1,5 @@
+# Runtime-PM fuer die dGPU und ihre Funktionsgeschwister (Audio/USB-C/UCSI)
+# aktivieren, sobald sie auftauchen. Ohne das bleibt die 4060 im D0 haengen.
+ACTION=="bind",   SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x030000", TEST=="power/control", ATTR{power/control}="auto"
+ACTION=="bind",   SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x040300", TEST=="power/control", ATTR{power/control}="auto"
+ACTION=="unbind", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x030000", TEST=="power/control", ATTR{power/control}="on"

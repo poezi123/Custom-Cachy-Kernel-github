@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Einmalig nach der Installation auf dem Laptop ausfuehren.
+set -euo pipefail
+[ "$(id -u)" -eq 0 ] || { echo "Bitte mit sudo ausfuehren."; exit 1; }
+U="${SUDO_USER:-$(logname 2>/dev/null || echo root)}"
+
+echo "=== 1/7  GPU-Offload-Shims erzeugen ==="
+/usr/local/bin/gpu-offload-sync
+
+echo "=== 2/7  Dienste aktivieren ==="
+systemctl enable --now power-profiles-daemon.service 2>/dev/null || true
+systemctl enable --now bluetooth.service            2>/dev/null || true
+systemctl enable --now docker.socket                2>/dev/null || true
+systemctl enable        gpu-offload-sync.service    2>/dev/null || true
+systemctl enable --now apparmor.service             2>/dev/null || true
+# NVIDIA-Suspend-Kette: ohne die verliert eine laufende CUDA-Session beim
+# Zuklappen den Kontext (NVreg_PreserveVideoMemoryAllocations=1 braucht sie).
+for s in nvidia-suspend nvidia-resume nvidia-hibernate; do
+  systemctl enable "$s.service" 2>/dev/null || true
+done
+
+echo "=== 3/7  Gruppen fuer $U ==="
+for g in docker vboxusers wireshark video render input; do
+  getent group "$g" >/dev/null && usermod -aG "$g" "$U" && echo "    + $g"
+done
+
+echo "=== 4/7  VirtualBox-Kernelmodule bauen (DKMS gegen linux-leon) ==="
+if command -v dkms >/dev/null; then
+  dkms autoinstall -k "$(uname -r)" || {
+    echo "    WARNUNG: DKMS-Build fehlgeschlagen."
+    echo "    Das ist der bekannte Schwachpunkt von VirtualBox mit Custom-Kernel."
+    echo "    Fallback: im GRUB den Rettungskernel (LTS) waehlen."
+  }
+  modprobe vboxdrv 2>/dev/null && echo "    vboxdrv geladen." || true
+fi
+
+echo "=== 5/7  Sensoren erfassen ==="
+sensors-detect --auto >/dev/null 2>&1 || true
+
+echo "=== 6/7  HP Victus: hp-wmi pruefen ==="
+modprobe hp-wmi 2>/dev/null || true
+if [ -r /sys/firmware/acpi/platform_profile ]; then
+  echo "    Board erkannt. Profile: $(cat /sys/firmware/acpi/platform_profile_choices 2>/dev/null | tr '\n' ' ')"
+else
+  echo "    WARNUNG: kein platform_profile - Board-ID fehlt vermutlich im Treiber."
+  echo "    Diagnose und fertiger Patch:  victus diagnose"
+fi
+
+echo "=== 7/7  Status ==="
+/usr/local/bin/gpu-mode status || true
+echo
+/usr/local/bin/victus status || true
+echo
+echo "Naechste optionale Schritte:"
+echo "  sudo switch-to-v4        # Userspace auf AVX-512 hochziehen"
+echo "  paru -S ryzenadj nbfc-linux   # TDP- und Luefterkontrolle (AUR)"
+echo "  clinfo | grep -i 'Device Name'   # pruefen ob hashcat beide GPUs sieht"

@@ -1,0 +1,30 @@
+#!/bin/bash
+# Startet Calamares im OFFLINE-Modus.
+#
+# Offline heisst hier: der Installer entpackt airootfs.sfs 1:1 auf die Platte.
+# Das installierte System ist damit exakt dieses Live-System - inklusive
+# linux-leon, Hyprland, dem Security-Stack und allen Anpassungen.
+# Der Online-Modus wuerde stattdessen eine Desktop-Auswahl zeigen und die
+# Pakete frisch aus dem Netz ziehen - dabei ginge unser Setup verloren.
+set -euo pipefail
+mode="offline"
+log="/home/liveuser/cachy-install.log"
+
+[ -d /sys/firmware/efi ] && SYSTEM="UEFI" || SYSTEM="BIOS/MBR"
+inxi -F > "$log" 2>/dev/null || true
+{
+  echo "########## Start (UTC): $(date -u '+%x %X')"
+  echo "########## ISO: $(cat /etc/version-tag 2>/dev/null || echo unbekannt)"
+  echo "########## Modus: $mode   System: $SYSTEM"
+} >> "$log"
+
+# Unsere angepassten Calamares-Dateien erst hier platzieren, nicht schon im
+# airootfs-Overlay: mkarchiso kopiert das Overlay VOR der Paketinstallation,
+# und cachyos-calamares-next fuehrt diese beiden Pfade nicht in seinem
+# backup-Array -> pacman bricht mit "exists in filesystem" ab.
+SRC=/usr/local/share/cachy-install
+sudo install -Dm644 "$SRC/settings_offline.conf" /usr/share/calamares/settings_offline.conf
+sudo install -Dm644 "$SRC/unpackfs.conf"         /etc/calamares/modules/unpackfs.conf
+
+sudo cp "/usr/share/calamares/settings_${mode}.conf" /etc/calamares/settings.conf
+exec pkexec-wrapper calamares -D6 >> "$log" 2>&1

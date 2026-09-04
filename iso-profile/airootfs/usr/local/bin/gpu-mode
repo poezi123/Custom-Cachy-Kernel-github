@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Schaltet zwischen den GPU-Betriebsarten des Hybrid-Systems.
+#
+#   hybrid      780M treibt den Desktop, 4060 schlaeft in D3cold (~0.5 W).
+#               Programme aus /etc/gpu-offload.d/apps.list laufen trotzdem
+#               automatisch auf der 4060.  <- Standard, bester Akku
+#   nvidia      Die komplette Hyprland-Session laeuft auf der 4060.
+#               Braucht Ab-/Anmeldung. Fuer Volllast am Netzteil.
+#   integrated  4060 wird komplett abgeschaltet (Module entladen).
+#               Maximale Laufzeit, kein CUDA verfuegbar.
+set -euo pipefail
+CONF=/etc/environment.d/95-gpu-mode.conf
+STATE=/var/lib/gpu-mode
+need_root(){ [ "$(id -u)" -eq 0 ] || { echo "Bitte mit sudo ausfuehren."; exit 1; }; }
+
+nv_pci(){ lspci -D -n 2>/dev/null | awk '$2 ~ /^030[02]:/ && /:10de:/ {print $1; exit}'; }
+nv_card(){ for d in /dev/dri/by-path/pci-*-card; do
+             [ -e "$d" ] || continue
+             case "$d" in *"$(nv_pci)"*) echo "$d"; return;; esac
+           done; }
+amd_card(){ for d in /dev/dri/by-path/pci-*-card; do
+             [ -e "$d" ] || continue
+             case "$d" in *"$(nv_pci)"*) ;; *) echo "$d"; return;; esac
+           done; }
+
+status(){
+  local p; p="$(nv_pci || true)"
+  echo "Modus:        $(cat "$STATE" 2>/dev/null || echo hybrid)"
+  if [ -n "$p" ]; then
+    echo "dGPU (PCI):   $p"
+    echo "Power-State:  $(cat "/sys/bus/pci/devices/$p/power_state" 2>/dev/null || echo '?')"
+    echo "Runtime-PM:   $(cat "/sys/bus/pci/devices/$p/power/control" 2>/dev/null || echo '?')"
+  else
+    echo "dGPU:         nicht sichtbar (integrated-Modus oder abgeschaltet)"
+  fi
+  if [ -e /sys/module/nvidia ]; then
+    echo -n "VRAM/Last:    "; nvidia-smi --query-gpu=memory.used,utilization.gpu \
+      --format=csv,noheader 2>/dev/null || echo "nvidia-smi nicht verfuegbar"
+  fi
+  echo "Shims:        $(ls /usr/local/lib/gpu-offload 2>/dev/null | wc -l) aktiv"
+}
+
+case "${1:-status}" in
+  hybrid)
+    need_root
+    rm -f /etc/modprobe.d/99-gpu-mode-off.conf
+    printf '# hybrid: Hyprland waehlt selbst (amdgpu primaer)\n' > "$CONF"
+    echo hybrid > "$STATE"
+    echo "Modus: hybrid. Nach Ab-/Anmeldung aktiv."
+    ;;
+  nvidia)
+    need_root
+    NC="$(nv_card)"; AC="$(amd_card)"
+    [ -n "$NC" ] || { echo "Keine NVIDIA-Karte gefunden - laeuft sie im integrated-Modus?"; exit 1; }
+    rm -f /etc/modprobe.d/99-gpu-mode-off.conf
+    # Aquamarine (Hyprlands Backend) nimmt das ERSTE Geraet als primaeres.
+    printf 'AQ_DRM_DEVICES=%s:%s\n' "$NC" "$AC" > "$CONF"
+    echo nvidia > "$STATE"
+    echo "Modus: nvidia (Session primaer auf der 4060)."
+    echo "  -> Abmelden und neu anmelden."
+    ;;
+  integrated)
+    need_root
+    printf 'blacklist nvidia\nblacklist nvidia_drm\nblacklist nvidia_modeset\nblacklist nvidia_uvm\n' \
+      > /etc/modprobe.d/99-gpu-mode-off.conf
+    printf '# integrated: dGPU deaktiviert\n' > "$CONF"
+    echo integrated > "$STATE"
+    modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia 2>/dev/null || \
+      echo "  Hinweis: Module noch in Benutzung - greift spaetestens nach Reboot."
+    echo "Modus: integrated. CUDA/hashcat sind damit NICHT verfuegbar."
+    ;;
+  status) status ;;
+  *) sed -n '2,14p' "$0" | sed 's/^# \?//'; exit 1 ;;
+esac

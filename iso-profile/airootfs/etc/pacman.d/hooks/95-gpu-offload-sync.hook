@@ -1,0 +1,14 @@
+# Nach jeder Paketaenderung Shims neu bauen: sonst zeigt ein Shim nach einem
+# Update ins Leere oder ein neu installiertes Programm bekommt keinen.
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Path
+Target = usr/bin/*
+
+[Action]
+Description = GPU-Offload-Shims aktualisieren...
+When = PostTransaction
+Exec = /usr/local/bin/gpu-offload-sync
+Depends = bash

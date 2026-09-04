@@ -1,0 +1,31 @@
+# Build-Artefakte - gehoeren NICHT ins Public Repo
+*.pkg.tar.zst
+*.pkg.tar.zst.sig
+*.iso
+*.iso.sha256
+out/
+work/
+build/
+src/
+repo/
+*.tar.gz
+*.tar.xz
+vmlinuz*
+initramfs*
+
+# Secrets - hart ausgeschlossen
+*.key
+*.pem
+*.gpg
+*.asc
+secring.*
+sbctl/
+Secure-Boot-Keys/
+.env
+*_rsa
+*_ed25519
+id_*
+
+# Python-Bytecode
+__pycache__/
+*.pyc

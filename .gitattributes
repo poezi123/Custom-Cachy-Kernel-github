@@ -1,0 +1,16 @@
+# Skripte immer mit LF - sonst zerlegt ein CRLF den Shebang.
+*.sh      text eol=lf
+*.py      text eol=lf
+PKGBUILD  text eol=lf
+*.conf    text eol=lf
+*.toml    text eol=lf
+*.rules   text eol=lf
+*.hook    text eol=lf
+*.md      text eol=lf
+
+# Die Kernel-Configs sind gross und generiert - nicht in Diffs aufblaehen.
+kernel/config      -diff
+kernel/config.built -diff
+
+# Binaeres
+*.png binary

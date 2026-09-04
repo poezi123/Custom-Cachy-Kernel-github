@@ -1,0 +1,31 @@
+# Ein Programmname pro Zeile. Diese Programme starten automatisch auf der
+# RTX 4060 statt auf der 780M.
+#
+# Zusatz "!perf" haelt fuer die Laufzeit zusaetzlich das Performance-Profil
+# des Laptops (power-profiles-daemon -> platform_profile=performance).
+# Auf dem Victus 16-s schaltet der hp-wmi-Treiber damit CTGP und PPAB der
+# 4060 frei - also mehr TGP-Budget. Genau das, was beim Cracken zaehlt.
+# Danach faellt das Profil automatisch zurueck.
+#
+# Nach dem Aendern:        sudo gpu-offload-sync
+# Einzelfall auf der iGPU: GPU_OFFLOAD=0 steam
+
+# --- Cracking (Prioritaet 10/10) ---
+hashcat        !perf
+john
+hcxdumptool
+
+# --- CUDA / Compute ---
+nvidia-smi
+nsys
+ncu
+
+# --- Gaming (Prioritaet 1/10, Steam war aber explizit gewuenscht) ---
+steam          !perf
+gamescope      !perf
+lutris
+heroic
+
+# --- Rendering ---
+blender        !perf
+obs

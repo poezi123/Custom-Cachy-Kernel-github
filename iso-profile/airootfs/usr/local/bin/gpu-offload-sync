@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Erzeugt aus /etc/gpu-offload.d/apps.list Shims, die betroffene Programme
+# automatisch auf der RTX 4060 starten.
+#
+# Mechanismus: /usr/local/lib/gpu-offload liegt im PATH VOR /usr/bin. Ein
+# Aufruf von z.B. "steam" trifft zuerst den Shim - egal ob aus dem Terminal,
+# aus Hyprland oder ueber eine .desktop-Datei.
+set -euo pipefail
+LIST=/etc/gpu-offload.d/apps.list
+DIR=/usr/local/lib/gpu-offload
+[ "$(id -u)" -eq 0 ] || { echo "Bitte mit sudo ausfuehren."; exit 1; }
+mkdir -p "$DIR"; find "$DIR" -type f -delete
+
+n=0
+while read -r line; do
+  line="${line%%#*}"
+  # shellcheck disable=SC2086
+  set -- $line
+  app="${1:-}"; [ -z "$app" ] && continue
+  perf=0; [ "${2:-}" = "!perf" ] && perf=1
+
+  # Echtes Binary suchen, dabei den Shim-Ordner aus dem PATH nehmen
+  real="$(PATH="$(echo "$PATH" | tr ':' '\n' | grep -vx "$DIR" | paste -sd:)" \
+          command -v "$app" 2>/dev/null || true)"
+  [ -z "$real" ] && continue
+
+  {
+    echo '#!/bin/sh'
+    echo "# Automatisch erzeugt von gpu-offload-sync - nicht von Hand aendern."
+    echo "# Diesen Start ausnahmsweise auf der iGPU:   GPU_OFFLOAD=0 $app"
+    echo "[ \"\${GPU_OFFLOAD:-1}\" = \"0\" ] && exec \"$real\" \"\$@\""
+    echo 'export __NV_PRIME_RENDER_OFFLOAD=1'
+    echo 'export __GLX_VENDOR_LIBRARY_NAME=nvidia'
+    echo 'export __VK_LAYER_NV_optimus=NVIDIA_only'
+    echo '[ -r /usr/share/vulkan/icd.d/nvidia_icd.json ] && \'
+    echo '  export VK_DRIVER_FILES=/usr/share/vulkan/icd.d/nvidia_icd.json'
+    if [ "$perf" = "1" ]; then
+      echo '# !perf: haelt das Performance-Profil fuer die Laufzeit.'
+      echo '# Auf dem Victus 16-s gibt das der 4060 via CTGP/PPAB mehr TGP.'
+      echo 'if command -v powerprofilesctl >/dev/null 2>&1; then'
+      echo "  exec powerprofilesctl launch -p performance -- \"$real\" \"\$@\""
+      echo 'fi'
+    fi
+    echo "exec \"$real\" \"\$@\""
+  } > "$DIR/$app"
+  chmod +x "$DIR/$app"
+  n=$((n+1))
+  [ "$perf" = "1" ] && echo "  -> $app  ($real)  [+performance]" || echo "  -> $app  ($real)"
+done < "$LIST"
+echo "$n Shims erzeugt in $DIR"

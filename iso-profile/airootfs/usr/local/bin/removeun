@@ -1,0 +1,53 @@
+#!/bin/bash
+# Angepasst gegenueber dem CachyOS-Original.
+#
+# Das Original entfernte nach der Installation u.a. tcpdump, cmake,
+# extra-cmake-modules, squashfs-tools, gparted, memtest86+ und
+# arch-install-scripts. Das sind Pakete aus dem gewuenschten Security-,
+# Dev- und Recovery-Stack -> hier bewusst BEHALTEN.
+#
+# Entfernt werden nur echte Live-ISO-Artefakte, die auf einem installierten
+# System keinen Zweck mehr haben.
+
+_remove_pacman_package() { pacman -Rsnc "$1" --noconfirm || true; }
+
+_clean_files() {
+  local f
+  for f in /usr/local/bin/choose-mirror \
+           /usr/local/bin/prepare-live-desktop.sh \
+           /usr/local/bin/removeun-online \
+           /usr/local/share/livecd-sound; do
+    rm -rf "$f" || true
+  done
+}
+
+# NUR Live-/Installer-Artefakte.
+_packages_to_remove=(
+  cachyos-calamares-next
+  cachyos-calamares-grub
+  cachyos-calamares-systemd
+  cachyos-calamares-refind
+  cachyos-calamares
+  cachyos-calamares-config
+  cachyos-cli-installer-new
+  mkinitcpio-archiso
+  clonezilla
+  grsync
+  elinks
+  gpart
+)
+
+# BEWUSST BEHALTEN (Original entfernte diese):
+#   tcpdump             - Security-Stack
+#   cmake, extra-cmake-modules, ninja - Dev-Toolchain
+#   squashfs-tools      - um spaeter selbst ISOs zu bauen
+#   gparted             - Partitionierung im Alltag
+#   arch-install-scripts- arch-chroot fuer Recovery
+#   memtest86+, edk2-shell, syslinux - Boot-/Diagnose-Faehigkeit
+#   boost-libs, yaml-cpp, doxygen, expect - harmlose Deps
+
+_clean_files
+for p in "${_packages_to_remove[@]}"; do
+  pacman -Qi "$p" &>/dev/null && _remove_pacman_package "$p"
+done
+exit 0

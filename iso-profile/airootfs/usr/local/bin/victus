@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# Thermik- und Luefterkontrolle fuer HP Victus 16-s (hier: 16-s1902ng).
+#
+# Nutzt den hp-wmi-Kerneltreiber. Kein nbfc, kein Reverse-Engineering des EC:
+# Kernel 7.2 kann Victus-S-Boards nativ (HPWMI_VICTUS_S_FAN_SPEED_SET_QUERY).
+#
+# Wichtig fuer hashcat: im Profil "performance" schaltet der Treiber zusaetzlich
+# CTGP (Configurable TGP) und PPAB (Dynamic Boost) der RTX 4060 frei - also
+# mehr Leistungsbudget fuer die GPU. Im Balanced-Profil bleibt das aus.
+set -uo pipefail
+
+PP=/sys/firmware/acpi/platform_profile
+PPC=/sys/firmware/acpi/platform_profile_choices
+hwmon_dir(){ for d in /sys/class/hwmon/hwmon*; do
+    [ "$(cat "$d/name" 2>/dev/null)" = "hp" ] && { echo "$d"; return; }; done; }
+
+status(){
+  echo "=== Board ==="
+  printf '  Modell:        %s\n' "$(cat /sys/class/dmi/id/product_name 2>/dev/null)"
+  printf '  Board-ID:      %s\n' "$(cat /sys/class/dmi/id/board_name 2>/dev/null)"
+  printf '  BIOS:          %s\n' "$(cat /sys/class/dmi/id/bios_version 2>/dev/null)"
+  echo
+  echo "=== hp-wmi ==="
+  if lsmod | grep -q '^hp_wmi'; then
+    echo "  Modul:         geladen"
+  else
+    echo "  Modul:         NICHT geladen  ->  sudo modprobe hp-wmi"
+  fi
+  if [ -r "$PP" ]; then
+    printf '  Profil:        %s   (moeglich: %s)\n' "$(cat "$PP")" "$(cat "$PPC" 2>/dev/null | tr '\n' ' ')"
+  else
+    echo "  Profil:        kein platform_profile - Board evtl. nicht erkannt."
+    echo "                 Siehe: victus diagnose"
+  fi
+  echo
+  echo "=== Luefter / Temperaturen ==="
+  local h; h="$(hwmon_dir)"
+  if [ -n "$h" ]; then
+    for f in "$h"/fan*_input; do
+      [ -e "$f" ] || continue
+      printf '  %-14s %s U/min\n' "$(basename "$f" _input):" "$(cat "$f")"
+    done
+    [ -e "$h/pwm1" ] && printf '  pwm1:          %s  (pwm1_enable=%s)\n' \
+      "$(cat "$h/pwm1")" "$(cat "$h/pwm1_enable" 2>/dev/null || echo '?')"
+  else
+    echo "  kein hp-hwmon gefunden"
+  fi
+  command -v sensors >/dev/null && sensors 2>/dev/null | grep -iE "k10temp|Tctl|edge|junction" | sed 's/^/  /'
+}
+
+diagnose(){
+  local b; b="$(cat /sys/class/dmi/id/board_name 2>/dev/null)"
+  echo "Board-ID dieses Geraets: ${b:-unbekannt}"
+  echo
+  if [ -r "$PP" ]; then
+    echo "hp-wmi hat das Board erkannt - alles in Ordnung, nichts zu tun."
+    return 0
+  fi
+  cat <<TXT
+hp-wmi hat KEIN platform_profile angelegt. Wahrscheinlich fehlt die Board-ID
+"$b" in der Liste victus_s_thermal_profile_boards[] in
+drivers/platform/x86/hp/hp-wmi.c.
+
+Das ist reparierbar, weil wir den Kernel selbst bauen. Vorgehen:
+
+  1. In kernel/PKGBUILD in prepare() einen Patch ergaenzen, der diesen Block
+     in die Liste victus_s_thermal_profile_boards[] einfuegt:
+
+        {
+            .matches = { DMI_MATCH(DMI_BOARD_NAME, "$b") },
+            .driver_data = (void *)&victus_s_thermal_params,
+        },
+
+  2. Kernel neu bauen: ./scripts/build-kernel.sh
+
+  3. Falls danach Profile schalten, aber die Werte falsch wirken, ist
+     stattdessen omen_v1_thermal_params oder omen_v1_legacy_thermal_params
+     die richtige Variante - ausprobieren.
+
+  4. Wenn es funktioniert: bitte an platform-driver-x86@vger.kernel.org
+     melden, dann landet die ID upstream und der Patch entfaellt kuenftig.
+TXT
+}
+
+case "${1:-status}" in
+  status) status ;;
+  diagnose) diagnose ;;
+  perf|performance)
+    [ "$(id -u)" -eq 0 ] || { echo "sudo noetig"; exit 1; }
+    echo performance > "$PP" && echo "Profil: performance (CTGP/PPAB fuer die 4060 aktiv)" ;;
+  balanced)
+    [ "$(id -u)" -eq 0 ] || { echo "sudo noetig"; exit 1; }
+    echo balanced > "$PP" && echo "Profil: balanced" ;;
+  quiet|low-power)
+    [ "$(id -u)" -eq 0 ] || { echo "sudo noetig"; exit 1; }
+    echo low-power > "$PP" && echo "Profil: low-power" ;;
+  fan)
+    [ "$(id -u)" -eq 0 ] || { echo "sudo noetig"; exit 1; }
+    h="$(hwmon_dir)"; [ -n "$h" ] || { echo "kein hp-hwmon"; exit 1; }
+    case "${2:-}" in
+      auto) echo 2 > "$h/pwm1_enable" && echo "Luefter: automatisch (EC steuert)" ;;
+      max)  echo 1 > "$h/pwm1_enable"; echo 255 > "$h/pwm1"; echo "Luefter: Maximum" ;;
+      [0-9]*) echo 1 > "$h/pwm1_enable"; echo "$2" > "$h/pwm1"
+              echo "Luefter: pwm1=$2 (0-255, manuell)" ;;
+      *) echo "Nutzung: victus fan {auto|max|0-255}"; exit 1 ;;
+    esac ;;
+  *) sed -n '2,12p' "$0" | sed 's/^# \?//'
+     echo "Befehle: status | diagnose | perf | balanced | quiet | fan {auto|max|0-255}" ;;
+esac

@@ -1,0 +1,13 @@
+# Nur fuer die Live-Umgebung: automatisch als liveuser in Hyprland.
+# Das installierte System bekommt von Calamares (shellprocess@greetd) die
+# richtige noctalia-greeter-Konfiguration und einen echten Login.
+[terminal]
+vt = 1
+
+[initial_session]
+command = "uwsm start -- hyprland.desktop"
+user = "liveuser"
+
+[default_session]
+command = "uwsm start -- hyprland.desktop"
+user = "liveuser"

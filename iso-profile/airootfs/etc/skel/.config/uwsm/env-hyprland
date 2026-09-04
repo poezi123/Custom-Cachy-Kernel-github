@@ -1,0 +1,28 @@
+# Hybrid-spezifische Umgebung: Radeon 780M primaer, RTX 4060 auf Abruf.
+#
+# uwsm liest zusaetzlich zu ~/.config/uwsm/env auch diese compositor-spezifische
+# Datei. Dadurch bleibt die CachyOS-Datei unveraendert und wird bei Updates des
+# Pakets cachyos-hypr-noctalia nicht mit unseren Aenderungen kollidieren.
+#
+# ACHTUNG zu den auskommentierten NVIDIA-Zeilen in ~/.config/uwsm/env:
+# Die gelten fuer Systeme mit AUSSCHLIESSLICH NVIDIA-GPU. Hier duerfen sie
+# NICHT gesetzt werden - GBM_BACKEND=nvidia-drm und
+# __GLX_VENDOR_LIBRARY_NAME=nvidia wuerden den gesamten Desktop ueber die
+# dGPU rendern. Die 4060 kaeme nie in D3cold, der Akkuvorteil waere weg.
+# Der Offload passiert stattdessen pro Programm ueber die Shims in
+# /usr/local/lib/gpu-offload (siehe /etc/gpu-offload.d/apps.list).
+
+# Hardware-Videodecoding auf der iGPU. Der Fixed-Function-Decoder der 780M
+# braucht einen Bruchteil der Leistung von CPU-Decoding und weckt die dGPU nicht.
+export LIBVA_DRIVER_NAME=radeonsi
+export VDPAU_DRIVER=radeonsi
+
+# Firefox/Chromium nativ unter Wayland
+export MOZ_ENABLE_WAYLAND=1
+export MOZ_DISABLE_RDD_SANDBOX=1
+
+# Vulkan: beide ICDs sichtbar lassen. Die Shims schraenken pro Programm ein.
+# (Kein VK_DRIVER_FILES hier setzen - das wuerde die Auswahl global festnageln.)
+
+# Der Shim-Pfad kommt aus /etc/environment.d/90-gpu-offload.conf und gilt
+# fuer die gesamte Session.

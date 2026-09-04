@@ -1,0 +1,22 @@
+# Hieraus generiert Calamares den Bootloader des INSTALLIERTEN Systems.
+GRUB_DEFAULT=0
+GRUB_TIMEOUT=3
+GRUB_DISTRIBUTOR="CachyOS-8845HS"
+
+# amd_pstate=active   EPP-Governor fuer Zen 4 -> Akku + Thermals
+# nowatchdog          spart Wakeups im Idle
+# split_lock_detect=off  vermeidet Stalls bei Emulatoren/VMs
+# amd_iommu=on iommu=pt  IOMMU im Passthrough-Modus: noetig fuer VFIO,
+#                        kostet im Normalbetrieb praktisch nichts
+# zswap.enabled=0     wir nutzen zram, nicht zswap - beide zusammen ist Unsinn
+#
+# Bewusst NICHT gesetzt: mitigations=off. Alle CPU-Mitigations bleiben aktiv.
+GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3 amd_pstate=active nowatchdog split_lock_detect=off amd_iommu=on iommu=pt zswap.enabled=0"
+GRUB_CMDLINE_LINUX=""
+
+GRUB_PRELOAD_MODULES="part_gpt part_msdos"
+GRUB_TERMINAL_INPUT=console
+GRUB_GFXMODE=auto
+GRUB_GFXPAYLOAD_LINUX=keep
+GRUB_DISABLE_RECOVERY=false
+GRUB_DISABLE_OS_PROBER=false

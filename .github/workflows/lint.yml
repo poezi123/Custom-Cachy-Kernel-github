@@ -1,0 +1,56 @@
+name: Lint
+
+# Baut die ISO NICHT nach - dafuer braucht es ~40 GB, Docker mit --privileged
+# und rund zwei Stunden. Geprueft wird, was sich guenstig pruefen laesst:
+# Shell-Syntax, Python-Syntax und die Konsistenz der Paketliste.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n auf allen Skripten
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            bash -n "$f" || { echo "::error file=$f::Syntaxfehler"; fail=1; }
+          done < <(find . -name '*.sh' -o -path './iso-profile/airootfs/usr/local/bin/*' -type f)
+          exit $fail
+      - name: shellcheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          severity: warning
+          ignore_paths: iso-profile/airootfs/usr/local/bin/calamares-online.sh
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m compileall -q scripts/
+
+  profile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Paketliste auf Dubletten und Leerzeichen pruefen
+        run: |
+          L=iso-profile/packages.x86_64
+          grep -vE '^#|^$' "$L" | sort | uniq -d | grep . \
+            && { echo "::error::Doppelte Pakete in $L"; exit 1; } || true
+          grep -nE ' $|^\s' "$L" \
+            && { echo "::error::Fuehrende/nachlaufende Leerzeichen in $L"; exit 1; } || true
+          echo "$(grep -cvE '^#|^$' "$L") Pakete, sauber."
+      - name: profiledef.sh - zeigen alle file_permissions auf existierende Dateien
+        run: |
+          cd iso-profile
+          fail=0
+          for f in $(grep -oE '\["/[^"]+"\]' profiledef.sh | tr -d '["]'); do
+            [ -e "airootfs$f" ] || { echo "::error::file_permissions zeigt auf fehlendes $f"; fail=1; }
+          done
+          exit $fail
+      - name: Keine Secrets im Repo
+        run: ./scripts/check-before-push.sh

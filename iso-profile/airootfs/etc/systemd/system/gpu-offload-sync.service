@@ -1,0 +1,12 @@
+[Unit]
+Description=GPU-Offload-Shims erzeugen
+After=local-fs.target
+ConditionPathExists=/etc/gpu-offload.d/apps.list
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/gpu-offload-sync
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

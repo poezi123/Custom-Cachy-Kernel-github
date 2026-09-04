@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=CachyOS 8845HS installieren
+Comment=Installiert dieses Live-System unveraendert auf die Platte
+Exec=/usr/local/bin/cachy-install
+Icon=calamares
+Terminal=false
+Categories=System;
