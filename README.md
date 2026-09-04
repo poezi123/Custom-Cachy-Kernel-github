@@ -120,6 +120,17 @@ Mit `PROJECT_ROOT=/pfad` lässt sich das Arbeitsverzeichnis überschreiben.
 
 Weitere Docs: [`kernel-rationale.md`](docs/kernel-rationale.md) · [`verification.md`](docs/verification.md) · [`security-fixes.md`](docs/security-fixes.md) · [`victus-16-s.md`](docs/victus-16-s.md)
 
+## Auf einen Stick schreiben
+
+```bash
+./scripts/write-usb.sh          # sucht den Stick selbst
+```
+
+Das Skript prüft vorher die SHA256, akzeptiert nur Geräte die USB **und**
+removable sind und kein Systemverzeichnis tragen, zeigt dir das Ziel und
+verlangt ein getipptes `JA`. Nach dem Schreiben liest es zurück und
+vergleicht die Prüfsumme.
+
 ## Was hier nicht liegt
 
 Die gebaute ISO (~7 GB) und die Kernelpakete sind **nicht** im Repo — GitHub
