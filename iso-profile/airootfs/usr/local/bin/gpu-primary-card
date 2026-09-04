@@ -23,7 +23,13 @@ find_card() {
     [ -e "$c" ] || continue
     card="$(basename "$(readlink -f "$c")")"
     drv="$(basename "$(readlink -f "/sys/class/drm/$card/device/driver" 2>/dev/null)" 2>/dev/null || true)"
-    if [ "$drv" = "amdgpu" ]; then echo "$c"; return 0; fi
+    # WICHTIG: den aufgeloesten Geraeteknoten /dev/dri/cardN ausgeben, NICHT den
+    # by-path-Symlink. Aquamarine (Hyprlands Backend) kann den Symlink unter
+    # /dev/dri/by-path/ nicht oeffnen -> "CBackend::create() failed!" -> Hyprland
+    # bricht mit SIGABRT ab, greetd gibt auf, schwarzer Schirm. Der reale Node
+    # funktioniert. cardN ist nicht boot-stabil, aber dieser Dienst laeuft bei
+    # jedem Boot vor greetd und ermittelt den aktuellen Node neu.
+    if [ "$drv" = "amdgpu" ]; then echo "/dev/dri/$card"; return 0; fi
   done
   return 1
 }
