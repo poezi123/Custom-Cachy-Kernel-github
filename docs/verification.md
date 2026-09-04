@@ -200,6 +200,35 @@ Im gebauten Kernel und in der ISO verifiziert: `CONFIG_DRM_AMDGPU=m`,
 `gc_11_0_1_mes*.bin.zst` present. Der endgültige Beweis ist erst der Boot auf
 dem Gerät.
 
+## Auf der echten Hardware verifiziert (per SSH, Live-Sitzung)
+
+Nach dem amdgpu- und AQ_DRM-Fix lief die Live-Sitzung auf dem Victus. Damit
+konnte endlich das geprueft werden, was QEMU nie zeigen konnte:
+
+| Prüfung | Ergebnis |
+|---|---|
+| Kernel `7.2.3-1-leon`, PREEMPT_DYNAMIC | `(full) lazy` |
+| `kernel.sched_bore` | `1` |
+| LSM-Kette | `lockdown,capability,landlock,yama,apparmor,bpf` |
+| BTF, THP, TCP, zram, MGLRU | vorhanden / madvise / bbr+fq / zstd 16G / an |
+| yama/perf/kptr/inotify | `1 / 1 / 1 / 524288` |
+| **NVIDIA 4060**, Treiber 610.57.04 | `nvidia-smi` ok, 8 GB |
+| **CUDA 13.3 in hashcat** | 4060 als Backend-Device erkannt |
+| **amdgpu 780M** | treibt eDP-1 @144 Hz |
+| **hp-wmi Victus `8C9C`** | nativ erkannt: `platform_profile` (low-power/balanced/performance), Lüfter-RPM, BIOS F.15 |
+
+Die offene Frage aus `victus-16-s.md` — ob die Board-ID dem Treiber bekannt ist —
+ist damit positiv beantwortet: **8C9C wird nativ unterstützt**, kein nbfc nötig.
+
+### Bekannte Lücke: 780M ohne OpenCL/ROCm
+
+`clinfo` zeigt nur die NVIDIA-CUDA-Plattform; die 780M taucht als OpenCL-Gerät
+nicht auf. Ursache ist Userspace, nicht der Kernel (HSA_AMD ist gebaut): es
+fehlt `rocm-opencl-runtime` bzw. eine rusticl-ICD. Bewusst **nicht** nachgezogen:
+die 780M (gfx1103) ist von ROCm offiziell nicht unterstützt und braucht einen
+`HSA_OVERRIDE_GFX_VERSION`-Hack; gegenüber der 4060 ist der Nutzen für hashcat
+vernachlässigbar. hashcat läuft auf der 4060 (CUDA).
+
 ## Was ungetestet blieb
 
 NVIDIA-Modul laden, CUDA und hashcat auf der 4060, `hp-wmi`-Bindung samt
