@@ -113,6 +113,34 @@ Profil, bevor `mkarchiso` läuft. Unabhängig davon zeigt
 verdrahtet aufruft — jetzt auf den Offline-Installer statt auf den
 Online-Pfad, der das gesamte Setup verworfen hätte.
 
+### Calamares startete nicht: boost-Soname
+
+Nach dem version-tag-Fix kam der Installer bis zum `exec` und starb dort:
+
+```
+calamares: error while loading shared libraries:
+libboost_python314.so.1.91.0: cannot open shared object file
+```
+
+Kein Fehler am Profil, sondern am CachyOS-Repo:
+
+| Paket | Version | Gebaut |
+|---|---|---|
+| `cachyos-calamares-next` | 3.4.2-13 | 2026-08-13 |
+| `boost-libs` | 1.92.0-1.1 | 2026-08-19 |
+
+boost wurde sechs Tage nach Calamares angehoben, Calamares aber nie neu
+gebaut. `depend = boost-libs` ist unversioniert, pacman installiert also 1.92,
+und der Soname passt nicht mehr. Das trifft **jede** CachyOS-ISO, die in
+diesem Zeitfenster gebaut wird — ein Neubau aus dem Repo hilft nicht, es ist
+derselbe Build.
+
+**Fix:** `build-iso.sh` holt `boost-libs-1.91.0-2` aus dem Arch-Archiv und
+legt daraus nur die Dateien mit Versionssuffix (`*.so.1.91.0`, 48 Stück) ins
+airootfs. Keine unversionierten Symlinks, also kein Konflikt mit 1.92 — beide
+Sonames liegen nebeneinander. Sobald upstream Calamares gegen 1.92 neu baut,
+kann der Block raus.
+
 ## Was ungetestet blieb
 
 NVIDIA-Modul laden, CUDA und hashcat auf der 4060, `hp-wmi`-Bindung samt
