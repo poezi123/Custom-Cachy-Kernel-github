@@ -60,4 +60,24 @@ mkdir -p "$DROPIN"
 printf '[Service]\nEnvironment=AQ_DRM_DEVICES=%s\n' "$CARD" > "$DROPIN/50-gpu-primary.conf"
 systemctl daemon-reload
 
-echo "Primaeres DRM-Geraet: $CARD"
+# Der eigentlich entscheidende Ort: uwsm startet Hyprland und baut dessen
+# Umgebung selbst neu auf - es reicht AQ_DRM_DEVICES aus environment.d oder aus
+# der greetd-Service-Umgebung NICHT zuverlaessig an den Compositor durch. Die
+# compositor-spezifische uwsm-Env-Datei wird dagegen garantiert gelesen. Also
+# tragen wir den Wert dort ein: in /etc/skel (Vorlage) und in jedes Home.
+_patch_uwsm() {
+  local f="$1" owner
+  [ -f "$f" ] || return 0
+  owner="$(stat -c '%u:%g' "$f")"
+  # vorhandene Zeile ersetzen, sonst anhaengen - immer mit aktuellem Pfad
+  if grep -q '^export AQ_DRM_DEVICES=' "$f"; then
+    sed -i "s|^export AQ_DRM_DEVICES=.*|export AQ_DRM_DEVICES=$CARD|" "$f"
+  else
+    printf '\n# Von gpu-primary.service gesetzt: primaeres DRM-Geraet (Display-GPU).\nexport AQ_DRM_DEVICES=%s\n' "$CARD" >> "$f"
+  fi
+  chown "$owner" "$f"
+}
+_patch_uwsm /etc/skel/.config/uwsm/env-hyprland
+for h in /home/*/.config/uwsm/env-hyprland; do _patch_uwsm "$h"; done
+
+echo "Primaeres DRM-Geraet: $CARD (environment.d, greetd, uwsm)"
