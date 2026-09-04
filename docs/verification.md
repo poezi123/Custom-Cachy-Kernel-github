@@ -141,6 +141,36 @@ airootfs. Keine unversionierten Symlinks, also kein Konflikt mit 1.92 — beide
 Sonames liegen nebeneinander. Sobald upstream Calamares gegen 1.92 neu baut,
 kann der Block raus.
 
+### Nach der Installation kein Bootloader
+
+Erster echter Installationslauf: Calamares meldete Erfolg, danach bootete das
+Gerät mit „please install an operating system on your hard disk". Ursache war
+nicht die Partitionierung, sondern die Bootloader-Config: der Paket-Default
+wählt den Bootloader über einen `packagechooser` (Default **limine**). Die
+Offline-Sequenz hat keinen solchen Auswahlschritt, und limine ist gar nicht in
+der ISO — nur `grub`. Also installierte Calamares **keinen** Bootloader.
+
+**Fix:** `cachy-install` legt ein `bootloader.conf`-Override ab, das `grub`
+erzwingt (`efiBootLoader: "grub"`, kein `packagechooser`-Verweis).
+`installEFIFallback` bleibt an — GRUB landet zusätzlich auf dem
+removable-Pfad `/EFI/BOOT/BOOTX64.EFI`, falls die HP-Firmware den
+NVRAM-Eintrag verwirft. Bei der Installation die Option **Gesamte Festplatte
+löschen** wählen, damit überhaupt eine EFI-Partition angelegt wird.
+
+### Schwarzer Schirm, zweiter Anlauf
+
+Der erste GPU-Fix (`gpu-primary.service` setzt `AQ_DRM_DEVICES` über
+`environment.d` und ein greetd-Drop-in) griff auf der echten Hardware nicht.
+Grund: `uwsm` startet Hyprland und baut dessen Umgebung selbst neu auf — es
+reicht diese Variablen nicht an den Compositor durch. Dazu ließ `nvidia_drm`
+mit `fbdev=1` die 4060 einen Framebuffer greifen, obwohl an ihr kein Display
+hängt.
+
+**Fix:** `fbdev=1` → `fbdev=0`, und `gpu-primary-card` schreibt
+`AQ_DRM_DEVICES` zusätzlich in die uwsm-Env-Datei `env-hyprland`, die uwsm
+garantiert liest. Beides hält den Hybridbetrieb (nvidia bleibt für hashcat
+geladen). Auf der Zielhardware noch nicht bestätigt.
+
 ## Was ungetestet blieb
 
 NVIDIA-Modul laden, CUDA und hashcat auf der 4060, `hp-wmi`-Bindung samt
