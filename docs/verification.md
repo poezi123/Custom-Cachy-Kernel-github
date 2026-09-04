@@ -171,6 +171,35 @@ hängt.
 garantiert liest. Beides hält den Hybridbetrieb (nvidia bleibt für hashcat
 geladen). Auf der Zielhardware noch nicht bestätigt.
 
+### Schwarzer Schirm — die tatsächliche Ursache (per SSH auf der Hardware)
+
+Die vorherigen GPU-Anläufe (`gpu-primary.service`, `AQ_DRM_DEVICES`, `fbdev=0`)
+lagen daneben. Über SSH in die laufende Live-Sitzung zeigte sich der wahre
+Grund: die einzige DRM-Karte war `simple-framebuffer` — **amdgpu lud gar
+nicht**:
+
+```
+amdgpu 0000:05:00.0: Direct firmware load for amdgpu/gc_11_0_1_mes.bin failed, error -2
+amdgpu 0000:05:00.0: Fatal error during GPU init
+```
+
+Nicht die 4060 stahl den Schirm — die 780M bekam nie einen Treiber. Das
+PKGBUILD baute amdgpu mit `scripts/config -e DRM_AMDGPU` als **builtin** (`=y`).
+Builtin initialisiert amdgpu, bevor das Wurzel-FS steht; die Firmware
+(`.zst`, korrekt vom Kernel dekomprimierbar) ist dann noch nicht erreichbar →
+Abbruch → Rückfall auf `simple-framebuffer`. Als **Modul** (`=m`, wie in
+linux-cachyos) lädt amdgpu über udev, wenn `/lib/firmware` da ist.
+
+**Fix:** `-e DRM_AMDGPU` → `-m`. Im installierten System ziehen die
+mkinitcpio-Hooks `autodetect` + `kms` amdgpu samt Firmware früh ins initramfs.
+`verify-kernel-config.sh` erwartete fälschlich `=y` und hatte den Fehler als
+„37/37 ok" verdeckt — jetzt erwartet es `=m`.
+
+Im gebauten Kernel und in der ISO verifiziert: `CONFIG_DRM_AMDGPU=m`,
+`amdgpu.ko` als Modul vorhanden, nicht in `modules.builtin`, Firmware
+`gc_11_0_1_mes*.bin.zst` present. Der endgültige Beweis ist erst der Boot auf
+dem Gerät.
+
 ## Was ungetestet blieb
 
 NVIDIA-Modul laden, CUDA und hashcat auf der 4060, `hp-wmi`-Bindung samt
