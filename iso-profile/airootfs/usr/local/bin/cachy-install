@@ -10,6 +10,16 @@ set -euo pipefail
 mode="offline"
 log="/home/liveuser/cachy-install.log"
 
+# Ist der Log-Pfad nicht beschreibbar - etwa weil ein frueherer Lauf als root
+# eine root-eigene Datei hinterlassen hat -, bricht "set -e" an der ersten
+# fehlgeschlagenen Umleitung ab, und zwar ohne jede Ausgabe: der Installer
+# scheint einfach nichts zu tun. Lieber woanders hin loggen als daran sterben.
+if ! : >> "$log" 2>/dev/null; then
+  log="$(mktemp -t cachy-install-XXXXXX.log)"
+  echo "Hinweis: /home/liveuser/cachy-install.log ist nicht beschreibbar."
+  echo "         Log geht stattdessen nach $log"
+fi
+
 [ -d /sys/firmware/efi ] && SYSTEM="UEFI" || SYSTEM="BIOS/MBR"
 inxi -F > "$log" 2>/dev/null || true
 {
