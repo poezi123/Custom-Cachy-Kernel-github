@@ -40,6 +40,7 @@ file_permissions=(
   ["/usr/local/bin/victus"]="0:0:755"
   ["/usr/local/bin/gpu-mode"]="0:0:755"
   ["/usr/local/bin/gpu-primary-card"]="0:0:755"
+  ["/usr/local/bin/set-keyboard-layout"]="0:0:755"
   ["/usr/local/bin/gpu-offload-sync"]="0:0:755"
   ["/usr/local/bin/pkexec-wrapper"]="0:0:755"
 )

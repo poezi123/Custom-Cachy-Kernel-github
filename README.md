@@ -56,6 +56,25 @@ beim Prozessstart entschieden. Stattdessen:
 - Maximale Laufzeit: `sudo gpu-mode integrated` (dGPU aus, kein CUDA)
 - Status: `gpu-mode status`
 
+## Tastatur
+
+Deutsches Layout, an drei Stellen — sie hängen nicht zusammen:
+
+| Wo | Wodurch |
+|---|---|
+| Textkonsole | `/etc/vconsole.conf` → `de-latin1` |
+| X11 / XWayland | `/etc/X11/xorg.conf.d/00-keyboard.conf` |
+| Hyprland-Sitzung | `set-keyboard-layout.service` |
+
+Hyprland liest sein `kb_layout` **nur** aus der eigenen Konfiguration — weder
+`vconsole.conf` noch die X11-Datei noch Calamares' Tastaturseite wirken darauf.
+Die Datei `inputs.lua` gehört aber dem Paket `cachyos-hypr-noctalia`, und das
+airootfs-Overlay wird vor der Paketinstallation kopiert: eine eigene Kopie
+würde pacman mit „exists in filesystem" abbrechen lassen. Deshalb ergänzt ein
+Dienst die vorhandene Datei beim Start — in `/etc/skel` und in jedem Home.
+
+Anderes Layout: `sudo set-keyboard-layout fr`, dann neu anmelden.
+
 ## Thermik & Lüfter: nativ, kein nbfc
 
 Kernel 7.2 unterstützt **Victus-S-Boards** im `hp-wmi`-Treiber direkt:
