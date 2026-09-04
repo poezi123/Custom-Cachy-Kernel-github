@@ -20,11 +20,28 @@ jobs:
             bash -n "$f" || { echo "::error file=$f::Syntaxfehler"; fail=1; }
           done < <(find . -name '*.sh' -o -path './iso-profile/airootfs/usr/local/bin/*' -type f)
           exit $fail
-      - name: shellcheck
+      # Nur eigener Code. Die aus CachyOS-Live-ISO uebernommenen Skripte
+      # (calamares-online.sh, prepare-live-desktop.sh, .automated_script.sh)
+      # pflegen wir nicht - ihre Warnungen wuerden die CI dauerhaft rot faerben,
+      # ohne dass wir etwas daran aendern koennen oder wollen.
+      - name: shellcheck (eigene Skripte)
         uses: ludeeus/action-shellcheck@master
         with:
           severity: warning
-          ignore_paths: iso-profile/airootfs/usr/local/bin/calamares-online.sh
+          scandir: ./scripts
+      - name: shellcheck (Laufzeit-Werkzeuge)
+        uses: ludeeus/action-shellcheck@master
+        with:
+          severity: warning
+          scandir: ./iso-profile/airootfs/usr/local/bin
+          ignore_names: >-
+            calamares-online.sh
+            prepare-live-desktop.sh
+            choose-mirror
+            dmcheck
+            pkexec-wrapper
+            remove-nvidia
+            removeun-online
 
   python:
     runs-on: ubuntu-latest

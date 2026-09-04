@@ -118,7 +118,7 @@ Mit `PROJECT_ROOT=/pfad` lässt sich das Arbeitsverzeichnis überschreiben.
 | `docker/` | Build-Container |
 | `docs/` | Entscheidungen und Rationale |
 
-Weitere Docs: [`kernel-rationale.md`](docs/kernel-rationale.md) · [`verification.md`](docs/verification.md) · [`security-fixes.md`](docs/security-fixes.md) · [`victus-16-s.md`](docs/victus-16-s.md) · [`github-publishing.md`](docs/github-publishing.md)
+Weitere Docs: [`kernel-rationale.md`](docs/kernel-rationale.md) · [`verification.md`](docs/verification.md) · [`security-fixes.md`](docs/security-fixes.md) · [`victus-16-s.md`](docs/victus-16-s.md)
 
 ## Was hier nicht liegt
 
@@ -133,9 +133,8 @@ wo sie gehostet ist. `SHA256SUMS` zum Abgleich liegt bei.
 ./scripts/check-before-push.sh
 ```
 
-Prüft auf Keys, Credentials, echte Passwort-Hashes, Captures und zu große
-Dateien. Was rein darf und was nicht:
-[`docs/github-publishing.md`](docs/github-publishing.md).
+Sucht nach Keys, Credentials, echten Passwort-Hashes, Captures und zu großen
+Dateien. Läuft auch in der CI.
 
 ## Lizenz
 

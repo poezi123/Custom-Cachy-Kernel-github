@@ -36,7 +36,7 @@ for f in "${FILES[@]}"; do
   # Ein blosses *wpa_supplicant* wuerde auch die systemd-Units des Dienstes
   # treffen - die enthalten nichts Geheimes.
   case "$f" in
-    */system-connections/*|*wpa_supplicant*.conf|*wpa_supplicant/*.conf|.env|*/.env|*.netrc|*/.netrc)
+    */system-connections/*|*wpa_supplicant*.conf|*.env|*.netrc)
       red "  CREDS $f"; FAIL=1 ;;
   esac
   # Tokens: GitHub ghp_/github_pat_, AWS AKIA, generische api_key=

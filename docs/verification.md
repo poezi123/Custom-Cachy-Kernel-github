@@ -1,118 +1,78 @@
-# Verifikation — was tatsächlich gemessen wurde
+# Was tatsächlich getestet wurde
 
-Alles hier ist **gemessen**, nicht angenommen. Build-Host: Ryzen 5 3600 (Zen 2),
-Test in QEMU/KVM mit OVMF.
+Alles hier ist gemessen, nicht angenommen. Gebaut auf einem Ryzen 5 3600
+(Zen 2), getestet in QEMU/KVM mit OVMF.
 
-## Kernel-Config: 37 von 37
+## Automatische Prüfungen
 
 `scripts/verify-kernel-config.sh` gegen die `.config` aus dem gebauten
-`linux-leon-headers`-Paket:
+Headers-Paket: **37 von 37**. Geprüft werden BORE, PREEMPT_DYNAMIC, HZ 1000,
+NO_HZ_IDLE, MZEN4, ThinLTO, THP madvise, HSA_AMD, eBPF/BTF, alle LSMs,
+kprobes/ftrace, die Härtungsoptionen, AMD_PMC/PMF, amd_pstate, MGLRU, zram, BBR.
 
-```
-37 ok, 0 abweichend
-```
+`scripts/verify-iso.sh`: **30 von 30**. Bootkatalog und EFI, beide Kernel mit
+initramfs, und im squashfs alle eigenen Skripte und Configs plus `hashcat`,
+`hyprland`, `ghidra`, `VirtualBox`, `docker`, `mold`, `ccache`. Und dass `sshd`
+*nicht* autostart-aktiv ist.
 
-Geprüft: BORE, PREEMPT_DYNAMIC, HZ=1000, NO_HZ_IDLE, MZEN4, ThinLTO, -O3,
-THP=madvise, HSA_AMD(+SVM), eBPF/BTF/BPF_LSM, Landlock, Yama, AppArmor,
-kprobes/uprobes/ftrace, SLAB-Härtung, KSTACK-Randomisierung,
-INIT_ON_ALLOC(an)/INIT_ON_FREE(aus), Lockdown nicht erzwungen,
-AMD_PMC/AMD_PMF/K10TEMP, amd_pstate, MGLRU, zram, BBR.
+## Boot
 
-## ISO-Inhalt: 30 von 30
+Die ISO bootet in QEMU über GRUB bis zum Hyprland-Desktop mit Noctalia-Shell —
+Top-Bar, CachyOS-Hello, Terminal per `SUPER+Return`. Screenshots entstehen mit
+`scripts/qemu-boot-test.py`.
 
-`scripts/verify-iso.sh`:
-
-- El-Torito-Bootkatalog, EFI-Verzeichnis
-- `vmlinuz-linux-leon` + `initramfs-linux-leon.img`
-- LTS-Rettungskernel
-- Im squashfs: alle eigenen Skripte und Configs, `hashcat`, `hyprland`,
-  `ghidra`, `VirtualBox`, `docker`, `mold`, `ccache`
-- `sshd` **nicht** autostart-aktiv (siehe `security-fixes.md`)
-- Beide Modulbäume: `7.2.3-1-leon` und `6.18.48-1-cachyos-lts`
-- NVIDIA-Module im Kernelpaket: `nvidia.ko`, `nvidia-drm`, `nvidia-uvm`,
-  `nvidia-modeset`, `nvidia-peermem`
-
-## Boot-Test
-
-**GUI (KVM):** ISO gebootet → GRUB → Hyprland mit Noctalia-Shell, Top-Bar,
-CachyOS-Hello, Terminal per `SUPER+Return`. Screenshots in `work/shots/`.
-
-**Seriell (Direktboot von Kernel + initramfs):**
+Direkter Kernelstart mit serieller Konsole:
 
 ```
 CachyOS 7.2.3-1-leon (ttyS0)
 CachyOS login:
 ```
 
-Null Panics, Oopses oder Invalid-Opcode-Fehler.
+Keine Panics, Oopses oder Invalid-Opcode-Fehler.
 
-### Laufzeitwerte im laufenden System
+## Laufzeitwerte im laufenden System
 
-| Prüfung | Ergebnis |
+| | |
 |---|---|
 | `uname -a` | `7.2.3-1-leon #1 SMP PREEMPT_DYNAMIC` |
-| `/sys/kernel/debug/sched/preempt` | `(full) lazy` |
+| `sched/preempt` | `(full) lazy` |
 | `kernel.sched_bore` | `1` |
 | zram | `/dev/zram0 zstd 3.8G`, Priorität 100 |
-| `/sys/kernel/security/lsm` | `lockdown,capability,landlock,yama,apparmor,bpf` |
-| `/sys/kernel/btf/vmlinux` | vorhanden, 10,8 MB |
+| LSM-Kette | `lockdown,capability,landlock,yama,apparmor,bpf` |
+| `/sys/kernel/btf/vmlinux` | da, 10,8 MB |
 | THP | `always [madvise] never` |
 | TCP | `bbr` + `fq` |
 | `modinfo nvidia` | `610.57.04` |
-| `hp_wmi` | im Baum: `.../platform/x86/hp/hp-wmi.ko.zst` |
-| yama/perf/kptr/inotify | `1 / 1 / 1 / 524288` — exakt wie konfiguriert |
-| `gpu-offload-sync` | erzeugt Shims, `hashcat` mit `[+performance]` |
+| yama / perf / kptr / inotify | `1 / 1 / 1 / 524288` |
 
-Der erzeugte hashcat-Shim endet korrekt mit:
+`gpu-offload-sync` erzeugt die Shims korrekt; der hashcat-Shim endet mit
+`exec powerprofilesctl launch -p performance -- /usr/bin/hashcat "$@"`.
 
-```sh
-exec powerprofilesctl launch -p performance -- "/usr/bin/hashcat" "$@"
-```
+## Zwei Annahmen, die sich als falsch erwiesen
 
-## Zwei Korrekturen aus dem Test
+**Der znver4-Kernel bootet sehr wohl auf Zen 2.** Ich war davon ausgegangen,
+`-march=znver4` mache ihn auf älteren CPUs unbootbar. Falsch: der Kernel wird
+mit `-mno-sse -mno-mmx -mno-avx` übersetzt, `-march` wirkt also nur auf
+Scheduling und skalare Befehle — und da bringt Zen 4 gegenüber Zen 2 nichts
+Neues. Praktische Folge: der echte Zielkernel ist lokal vollständig testbar.
 
-### 1. Der znver4-Kernel bootet sehr wohl auf Zen 2
-
-Ursprüngliche Annahme: `-march=znver4` mache den Kernel auf älteren CPUs
-unbootbar, deshalb sei nur der LTS-Kernel lokal testbar. **Falsch.**
-
-Der Kernel wird mit `-mno-sse -mno-mmx -mno-avx` übersetzt — `-march=znver4`
-wirkt daher nur auf Instruktions-Scheduling und skalare Befehle, und Zen 4
-bringt gegenüber Zen 2 keine neuen skalaren Instruktionen mit (AVX-512 ist rein
-vektoriell und wird im Kernel nie erzeugt). Der Kernel bootete auf dem Zen-2-Host
-mit `-cpu host` fehlerfrei bis zum Login.
-
-Praktische Folge: der echte Zielkernel ist vollständig lokal testbar.
-Der LTS-Kernel bleibt trotzdem auf der ISO — als Rückfallebene, falls
-`virtualbox-host-dkms` nach einem Update nicht gegen `linux-leon` baut.
-
-### 2. `vm.swappiness` wird per udev gesetzt, nicht per sysctl
-
-`/etc/sysctl.d/99-leon.conf` enthielt `vm.swappiness = 180`, gemessen wurden
-aber 150. Ursache:
+**`vm.swappiness` wird per udev gesetzt, nicht per sysctl.** In
+`99-leon.conf` stand 180, gemessen wurden 150. Ursache:
 
 ```
 /usr/lib/udev/rules.d/30-zram.rules   (aus cachyos-settings)
-ACTION=="change", KERNEL=="zram0", ATTR{initstate}=="1", SYSCTL{vm.swappiness}="150"
+ACTION=="change", KERNEL=="zram0", ... SYSCTL{vm.swappiness}="150"
 ```
 
-Diese Regel läuft **nach** `systemd-sysctl` und gewinnt immer. Alle anderen
-Werte aus derselben Datei kamen korrekt an — es liegt also nicht an sysctl.
+Diese Regel läuft *nach* `systemd-sysctl` und gewinnt immer — alle anderen
+Werte aus derselben Datei kamen korrekt an. Die wirkungslose Zeile ist raus.
+Wer 180 will, legt `/etc/udev/rules.d/31-zram-swappiness.rules` an.
 
-Konsequenz: die wirkungslose Zeile ist aus `99-leon.conf` entfernt, mit
-Kommentar auf die udev-Regel. Wer 180 will, legt
-`/etc/udev/rules.d/31-zram-swappiness.rules` an (31 sortiert nach 30).
+## Was ungetestet blieb
 
-**Hinweis:** Diese Korrektur ist in der Quelle, aber die bereits gebaute ISO
-enthält noch die wirkungslose Zeile. Rein kosmetisch — das Verhalten ist in
-beiden Fällen identisch (150). Beim nächsten Rebuild verschwindet sie.
+NVIDIA-Modul laden, CUDA und hashcat auf der 4060, `hp-wmi`-Bindung samt
+Lüftersteuerung und `platform_profile`, PRIME-Offload und D3cold — dafür
+braucht es die echte Hardware, QEMU hat weder NVIDIA-GPU noch HP-Board.
 
-## Was hier nicht geprüft werden konnte
-
-| | Warum |
-|---|---|
-| NVIDIA-Modul lädt / CUDA / hashcat auf der 4060 | QEMU hat keine NVIDIA-GPU. Modul und Version sind vorhanden, das Laden braucht die echte Karte. |
-| `hp-wmi` bindet, Lüfter, `platform_profile` | `modprobe hp-wmi` → `No such device`. Erwartet: kein HP-Board in QEMU. |
-| PRIME-Offload, D3cold, `gpu-mode` | Braucht die echte Hybrid-Hardware. |
-| Calamares-Offline-Installation auf Platte | Nicht durchgeführt — hätte eine zweite VM mit Zieldatenträger gebraucht. |
-| `virtualbox-host-dkms` gegen `linux-leon` | Wird beim ersten `postinstall-8845hs` auf dem Laptop gebaut. |
+Die Calamares-Installation auf eine Platte habe ich nicht durchgespielt, und
+`virtualbox-host-dkms` baut erst beim ersten `postinstall-8845hs`.
