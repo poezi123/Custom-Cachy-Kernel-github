@@ -1,37 +1,17 @@
 #!/usr/bin/env bash
-# Traegt das Tastaturlayout in Hyprlands Konfiguration nach (Standard: de).
-#
-# Warum ein Dienst und keine Datei im Overlay: inputs.lua gehoert dem Paket
-# cachyos-hypr-noctalia. mkarchiso kopiert das airootfs-Overlay VOR der
-# Paketinstallation - pacman bricht dann mit "exists in filesystem" ab.
-# Deshalb wird die vorhandene Datei zur Laufzeit ergaenzt, nicht ersetzt.
-#
-# Warum ueberhaupt: Hyprland liest sein kb_layout ausschliesslich aus der
-# eigenen Konfiguration. Weder /etc/vconsole.conf noch die X11-Tastaturdatei
-# noch Calamares' Tastaturseite wirken darauf - die Sitzung bliebe sonst auf
-# us, egal was sonst eingestellt ist.
-#
-# Betrifft /etc/skel (die Vorlage fuer den Benutzer, den Calamares anlegt)
-# und jedes bereits vorhandene Home.
+# Traegt kb_layout in Hyprlands inputs.lua nach (Default: de).
 set -euo pipefail
 LAYOUT="${1:-de}"
 
 patch_file() {
   local f="$1" owner
   [ -f "$f" ] || return 0
-  grep -q 'kb_layout' "$f" && return 0          # schon gesetzt
-
+  grep -q kb_layout "$f" && return 0
   owner="$(stat -c '%u:%g' "$f")"
-  # Bevorzugt hinter accel_profile einhaengen; faellt das weg, direkt hinter
-  # die input-Zeile. Beides nur beim ersten Treffer.
   sed -i "0,/accel_profile *= *\"[^\"]*\",/s//&\n        kb_layout = \"$LAYOUT\",/" "$f"
-  grep -q 'kb_layout' "$f" || \
-    sed -i "0,/input *= *{/s//&\n        kb_layout = \"$LAYOUT\",/" "$f"
-
+  grep -q kb_layout "$f" || sed -i "0,/input *= *{/s//&\n        kb_layout = \"$LAYOUT\",/" "$f"
   chown "$owner" "$f"
-  grep -q 'kb_layout' "$f" && echo "    $f" || echo "    FEHLGESCHLAGEN: $f"
 }
 
-echo "Tastaturlayout '$LAYOUT':"
 patch_file /etc/skel/.config/hypr/config/inputs.lua
 for h in /home/*/.config/hypr/config/inputs.lua; do patch_file "$h"; done

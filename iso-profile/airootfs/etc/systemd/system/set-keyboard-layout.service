@@ -1,7 +1,5 @@
 [Unit]
 Description=Deutsches Tastaturlayout in Hyprlands Konfiguration eintragen
-# Muss vor dem Compositor laufen - greetd startet den Greeter, der das Layout
-# schon braucht.
 Before=greetd.service display-manager.service graphical.target
 
 [Service]

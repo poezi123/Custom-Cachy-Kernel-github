@@ -35,13 +35,8 @@ docker run --rm -i \
 # --- 2) ISO bauen ---------------------------------------------------------
 # --privileged: mkarchiso braucht Loop-Devices und mount im Container.
 echo ">>> mkarchiso startet (das dauert)."
-# cachyos-hello liest /etc/version-tag und prueft es gegen
-# https://cachyos.org/versions.json. Fehlt die Datei, haelt es die ISO fuer
-# einen Testing-Build, meldet "Testing-ISOs sind nicht stabil und nicht zum
-# Verwenden geeignet" und startet den Installer gar nicht erst.
-# Upstream schreibt die Datei in util-iso.sh (generate_version_tag); unser
-# Build ruft util-iso.sh nicht auf, also hier - mit derselben Version, die
-# profiledef.sh fuer den ISO-Namen benutzt.
+# version-tag setzen, sonst haelt cachyos-hello die ISO fuer einen Testing-Build
+# und startet den Installer nicht.
 ISO_VERSION="$(date --date="@${SOURCE_DATE_EPOCH:-$(date +%s)}" +%Y.%m.%d)"
 echo ">>> ISO-Version: $ISO_VERSION"
 
@@ -71,16 +66,9 @@ docker run --rm -i --privileged \
 
     sudo cp -r /profile /tmp/profile        # mkarchiso schreibt ins Profil
 
-    # cachyos-calamares-next 3.4.2-13 wurde am 13.08.2026 gebaut und ist gegen
-    # boost 1.91 gelinkt. boost-libs im Repo steht seit dem 19.08. auf 1.92,
-    # und "depend = boost-libs" ist unversioniert - pacman nimmt also 1.92, der
-    # Soname passt nicht mehr, und Calamares startet gar nicht:
-    #   libboost_python314.so.1.91.0: cannot open shared object file
-    # Das trifft jede CachyOS-ISO, die derzeit gebaut wird; upstream hat
-    # Calamares nach dem boost-Bump nicht neu gebaut.
-    # Bis das behoben ist, legen wir die versionierten 1.91-Bibliotheken
-    # daneben. Nur Dateien mit Versionssuffix, keine Symlinks - deshalb
-    # kollidiert nichts mit 1.92, und beide Sonames existieren parallel.
+    # calamares-next ist gegen boost 1.91 gelinkt, das Repo liefert 1.92 -> Calamares
+    # startet nicht. Die versionierten 1.91-Libs daneben legen (keine Symlinks,
+    # kein Konflikt mit 1.92). Raus, sobald upstream neu baut.
     BOOST=boost-libs-1.91.0-2-x86_64.pkg.tar.zst
     curl -sL --fail -o "/tmp/$BOOST" \
       "https://archive.archlinux.org/packages/b/boost-libs/$BOOST"

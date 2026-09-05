@@ -99,9 +99,7 @@ echo ">>> sync ..."
 sync
 
 # --- Zurueckgelesen vergleichen --------------------------------------------
-# status=progress, nicht status=none: das Ruecklesen dauert bei einem
-# USB-2.0-Stick (~23 MiB/s) rund fuenf Minuten. Ohne Fortschrittsanzeige sieht
-# das aus wie ein Absturz - genau der Eindruck ist hier schon entstanden.
+# status=progress: das Ruecklesen dauert an USB 2.0 Minuten und saehe sonst aus wie ein Absturz
 echo ">>> Pruefe das Geschriebene (liest $(numfmt --to=iec "$ISO_SIZE") zurueck) ..."
 EXPECT=$(sha256sum "$ISO" | cut -d' ' -f1)
 ACTUAL=$(sudo dd if="$DEV" bs=4M count=$(( (ISO_SIZE + 4194303) / 4194304 )) \

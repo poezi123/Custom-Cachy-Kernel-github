@@ -59,12 +59,9 @@ Setup verworfen. Dazu fehlte in `settings_offline.conf` die Modulinstanz
 plus `.desktop`-Eintrag. Der greetd-Schritt ist in unsere
 `settings_offline.conf` eingefügt.
 
-Nachtrag vom ersten Boot auf echter Hardware: das genügte nicht. cachyos-hello
-ruft `/usr/local/bin/calamares-online.sh` **fest verdrahtet** auf — der Pfad
-steht als Literal im Binary. Wer den Install-Knopf im Willkommensfenster
-drückt, landet also weiterhin im Online-Pfad, egal welcher `.desktop`-Eintrag
-daneben liegt. Deshalb ist `calamares-online.sh` jetzt ein Shim, der auf
-`cachy-install` zeigt. Kein Weg führt mehr in den Online-Installer.
+Nachtrag: cachyos-hello ruft `calamares-online.sh` fest verdrahtet auf. Der
+Install-Knopf im Willkommensfenster landet also trotzdem im Online-Pfad — daher
+ist die Datei jetzt ein Shim auf `cachy-install`.
 
 Kleinigkeit am Rande: `vmtoolsd`, `vmware-vmblock-fuse`, `hv_*` und
 `vboxservice` waren autostart-aktiv. Das sind Gast-Tools für den Betrieb

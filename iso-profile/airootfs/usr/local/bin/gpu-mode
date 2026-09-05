@@ -44,10 +44,6 @@ case "${1:-status}" in
   hybrid)
     need_root
     rm -f /etc/modprobe.d/99-gpu-mode-off.conf
-    # Kein AQ_DRM_DEVICES hier: die 94-gpu-primary.conf aus gpu-primary.service
-    # zeigt bereits auf die Display-GPU. Diese Datei (95-) wuerde sie sonst
-    # ueberstimmen - sie existiert nur, um einen vorherigen nvidia-Modus zu
-    # loeschen.
     printf '# hybrid: primaeres Geraet kommt aus 94-gpu-primary.conf\n' > "$CONF"
     echo hybrid > "$STATE"
     echo "Modus: hybrid. Nach Ab-/Anmeldung aktiv."

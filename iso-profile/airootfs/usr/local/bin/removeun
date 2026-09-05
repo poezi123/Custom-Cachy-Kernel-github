@@ -46,18 +46,9 @@ _packages_to_remove=(
 #   memtest86+, edk2-shell, syslinux - Boot-/Diagnose-Faehigkeit
 #   boost-libs, yaml-cpp, doxygen, expect - harmlose Deps
 
-# Calamares' Offline-Sequenz ruft NACH diesem Skript noch drei Skripte auf, die
-# dem Calamares-Paket gehoeren, das wir hier gerade entfernen:
-#   /etc/calamares/scripts/{dmcheck,shell-setup,bootloader-post-setup}
-# (Hauptschritt "shellprocess", siehe shellprocess.conf). "pacman -Rsnc" loescht
-# sie mit, und der naechste Schritt stirbt dann mit Exit 127 -> die ganze
-# Installation bricht ab ("Externes Programm mit Fehlern beendet").
-#
-# Upstream entgeht dem nur im pacstrap-Modus: dort legt "postInstallFiles"
-# (pacstrap.conf) diese Skripte vorher als paketunabhaengige Kopien ab, die die
-# Paketentfernung ueberleben. Der Offline-Modus (unpackfs) kennt diesen Schritt
-# nicht. Also machen wir es hier selbst: wegsichern, Paket entfernen,
-# als paketfreie Dateien zuruecklegen. Calamares raeumt sie danach selbst weg.
+# Calamares ruft nach removeun noch dmcheck/shell-setup/bootloader-post-setup auf,
+# die dem gerade entfernten Paket gehoeren. Wegsichern und paketfrei zuruecklegen,
+# sonst bricht die Installation mit Exit 127 ab.
 _detach_needed_scripts() {
   local d=/etc/calamares/scripts s b
   _stash="$(mktemp -d)"

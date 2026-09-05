@@ -10,10 +10,8 @@ set -euo pipefail
 mode="offline"
 log="/home/liveuser/cachy-install.log"
 
-# Ist der Log-Pfad nicht beschreibbar - etwa weil ein frueherer Lauf als root
-# eine root-eigene Datei hinterlassen hat -, bricht "set -e" an der ersten
-# fehlgeschlagenen Umleitung ab, und zwar ohne jede Ausgabe: der Installer
-# scheint einfach nichts zu tun. Lieber woanders hin loggen als daran sterben.
+# Nicht beschreibbares Log (z.B. root-eigene Datei aus einem sudo-Lauf) wuerde
+# das Skript unter set -e still killen - dann lieber woanders hin loggen.
 if ! : >> "$log" 2>/dev/null; then
   log="$(mktemp -t cachy-install-XXXXXX.log)"
   echo "Hinweis: /home/liveuser/cachy-install.log ist nicht beschreibbar."
@@ -35,8 +33,7 @@ inxi -F > "$log" 2>/dev/null || true
 SRC=/usr/local/share/cachy-install
 sudo install -Dm644 "$SRC/settings_offline.conf" /usr/share/calamares/settings_offline.conf
 sudo install -Dm644 "$SRC/unpackfs.conf"         /etc/calamares/modules/unpackfs.conf
-# Bootloader fest auf grub - der Paket-Default waehlt limine, das hier nicht
-# installiert ist. Ohne das bleibt das installierte System ohne Bootloader.
+# grub erzwingen (Paket-Default limine ist hier nicht installiert)
 sudo install -Dm644 "$SRC/bootloader.conf"       /etc/calamares/modules/bootloader.conf
 
 sudo cp "/usr/share/calamares/settings_${mode}.conf" /etc/calamares/settings.conf

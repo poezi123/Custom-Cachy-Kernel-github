@@ -1,243 +1,70 @@
-# Was tatsächlich getestet wurde
+# Was getestet wurde
 
-Alles hier ist gemessen, nicht angenommen. Gebaut auf einem Ryzen 5 3600
-(Zen 2), getestet in QEMU/KVM mit OVMF.
+Gebaut auf einem Ryzen 5 3600 (Zen 2), geprüft in QEMU/KVM und danach auf dem
+echten Victus (Live-Sitzung über SSH).
 
 ## Automatische Prüfungen
 
-`scripts/verify-kernel-config.sh` gegen die `.config` aus dem gebauten
-Headers-Paket: **37 von 37**. Geprüft werden BORE, PREEMPT_DYNAMIC, HZ 1000,
-NO_HZ_IDLE, MZEN4, ThinLTO, THP madvise, HSA_AMD, eBPF/BTF, alle LSMs,
-kprobes/ftrace, die Härtungsoptionen, AMD_PMC/PMF, amd_pstate, MGLRU, zram, BBR.
+`scripts/verify-kernel-config.sh` gegen die `.config` aus dem Headers-Paket:
+**37/37** — BORE, PREEMPT_DYNAMIC, HZ 1000, MZEN4, ThinLTO, THP madvise,
+HSA_AMD, eBPF/BTF, alle LSMs, Härtung, AMD_PMC/PMF, amd_pstate, MGLRU, zram, BBR.
+`DRM_AMDGPU` wird als Modul (`=m`) erwartet.
 
-`scripts/verify-iso.sh`: **30 von 30**. Bootkatalog und EFI, beide Kernel mit
-initramfs, und im squashfs alle eigenen Skripte und Configs plus `hashcat`,
-`hyprland`, `ghidra`, `VirtualBox`, `docker`, `mold`, `ccache`. Und dass `sshd`
-*nicht* autostart-aktiv ist.
+`scripts/verify-iso.sh`: **30/30** — Bootkatalog, EFI, beide Kernel, und im
+squashfs die eigenen Skripte plus hashcat, hyprland, ghidra, VirtualBox, docker.
+Und dass `sshd` nicht autostart-aktiv ist.
 
-## Boot
-
-Die ISO bootet in QEMU über GRUB bis zum Hyprland-Desktop mit Noctalia-Shell —
-Top-Bar, CachyOS-Hello, Terminal per `SUPER+Return`. Screenshots entstehen mit
-`scripts/qemu-boot-test.py`.
-
-Direkter Kernelstart mit serieller Konsole:
-
-```
-CachyOS 7.2.3-1-leon (ttyS0)
-CachyOS login:
-```
-
-Keine Panics, Oopses oder Invalid-Opcode-Fehler.
-
-## Laufzeitwerte im laufenden System
+## Laufzeitwerte (echte Hardware)
 
 | | |
 |---|---|
-| `uname -a` | `7.2.3-1-leon #1 SMP PREEMPT_DYNAMIC` |
+| `uname` | `7.2.3-1-leon`, PREEMPT_DYNAMIC |
 | `sched/preempt` | `(full) lazy` |
 | `kernel.sched_bore` | `1` |
-| zram | `/dev/zram0 zstd 3.8G`, Priorität 100 |
 | LSM-Kette | `lockdown,capability,landlock,yama,apparmor,bpf` |
-| `/sys/kernel/btf/vmlinux` | da, 10,8 MB |
-| THP | `always [madvise] never` |
-| TCP | `bbr` + `fq` |
-| `modinfo nvidia` | `610.57.04` |
-| yama / perf / kptr / inotify | `1 / 1 / 1 / 524288` |
-
-`gpu-offload-sync` erzeugt die Shims korrekt; der hashcat-Shim endet mit
-`exec powerprofilesctl launch -p performance -- /usr/bin/hashcat "$@"`.
-
-## Zwei Annahmen, die sich als falsch erwiesen
-
-**Der znver4-Kernel bootet sehr wohl auf Zen 2.** Ich war davon ausgegangen,
-`-march=znver4` mache ihn auf älteren CPUs unbootbar. Falsch: der Kernel wird
-mit `-mno-sse -mno-mmx -mno-avx` übersetzt, `-march` wirkt also nur auf
-Scheduling und skalare Befehle — und da bringt Zen 4 gegenüber Zen 2 nichts
-Neues. Praktische Folge: der echte Zielkernel ist lokal vollständig testbar.
-
-**`vm.swappiness` wird per udev gesetzt, nicht per sysctl.** In
-`99-leon.conf` stand 180, gemessen wurden 150. Ursache:
-
-```
-/usr/lib/udev/rules.d/30-zram.rules   (aus cachyos-settings)
-ACTION=="change", KERNEL=="zram0", ... SYSCTL{vm.swappiness}="150"
-```
-
-Diese Regel läuft *nach* `systemd-sysctl` und gewinnt immer — alle anderen
-Werte aus derselben Datei kamen korrekt an. Die wirkungslose Zeile ist raus.
-Wer 180 will, legt `/etc/udev/rules.d/31-zram-swappiness.rules` an.
-
-## Was der erste Boot auf echter Hardware ergab
-
-Zwei Dinge, die QEMU nicht zeigen konnte, weil dort weder eine zweite GPU noch
-ein Netzwerk-Check existiert. Beide sind gefixt, beide waren echte Blocker.
-
-### Schwarzer Bildschirm, sporadisch
-
-Von drei Boots kamen zwei nicht über die Bootmeldungen hinaus — kein Hyprland,
-kein Greeter, schwarz. Der dritte lief durch. Sporadisch, nicht reproduzierbar.
-
-Ursache: Aquamarine, Hyprlands Backend, nimmt das **erste** DRM-Gerät als
-primäres. Welches das ist, entscheidet die Reihenfolge der Geräte-Enumeration,
-und die ist nicht deterministisch. Das Victus 16-s hat **keinen MUX** — das
-Panel hängt fest an der 780M, die 4060 hat keinen Ausgang. Fällt die
-Enumeration auf die 4060, rendert der Compositor auf eine Karte ohne Display.
-
-Der Hybrid-Zweig von `gpu-mode` setzte `AQ_DRM_DEVICES` bewusst nicht, mit dem
-Kommentar „Hyprland wählt selbst (amdgpu primär)". Das war eine Annahme, keine
-Messung — und sie stimmt in etwa einem von drei Boots nicht.
-
-**Fix:** `gpu-primary-card` sucht über `/dev/dri/by-path/` die Karte mit
-Treiber `amdgpu` — der by-path-Pfad hängt an der PCI-Adresse und ist stabil,
-während die `cardN`-Nummer selbst das Problem ist. `gpu-primary.service`
-schreibt sie vor `greetd.service` nach `/etc/environment.d/94-gpu-primary.conf`
-und zusätzlich als Drop-in in die greetd-Unit: der Greeter startet, bevor eine
-User-Session existiert, und liest `environment.d` nicht. Die Nummer 94 lässt
-`gpu-mode nvidia` mit seiner `95-gpu-mode.conf` weiterhin gewinnen.
-
-### Der Installer verweigerte den Start
-
-cachyos-hello meldete „Du verwendest eine alte Testing ISO, Testing-ISOs sind
-nicht stabil und nicht zum Verwenden geeignet" und startete Calamares nicht.
-
-Ursache: cachyos-hello liest `/etc/version-tag` und prüft es gegen
-`https://cachyos.org/versions.json`. Upstream schreibt die Datei in
-`util-iso.sh` (`generate_version_tag`); unser Build ruft `util-iso.sh` nicht
-auf, die Datei fehlte also komplett — und ohne Version gilt die ISO als
-Testing-Build.
-
-**Fix:** `build-iso.sh` schreibt `version-tag` und `edition-tag` in das
-Profil, bevor `mkarchiso` läuft. Unabhängig davon zeigt
-`/usr/local/bin/calamares-online.sh` — der Pfad, den cachyos-hello fest
-verdrahtet aufruft — jetzt auf den Offline-Installer statt auf den
-Online-Pfad, der das gesamte Setup verworfen hätte.
-
-### Calamares startete nicht: boost-Soname
-
-Nach dem version-tag-Fix kam der Installer bis zum `exec` und starb dort:
-
-```
-calamares: error while loading shared libraries:
-libboost_python314.so.1.91.0: cannot open shared object file
-```
-
-Kein Fehler am Profil, sondern am CachyOS-Repo:
-
-| Paket | Version | Gebaut |
-|---|---|---|
-| `cachyos-calamares-next` | 3.4.2-13 | 2026-08-13 |
-| `boost-libs` | 1.92.0-1.1 | 2026-08-19 |
-
-boost wurde sechs Tage nach Calamares angehoben, Calamares aber nie neu
-gebaut. `depend = boost-libs` ist unversioniert, pacman installiert also 1.92,
-und der Soname passt nicht mehr. Das trifft **jede** CachyOS-ISO, die in
-diesem Zeitfenster gebaut wird — ein Neubau aus dem Repo hilft nicht, es ist
-derselbe Build.
-
-**Fix:** `build-iso.sh` holt `boost-libs-1.91.0-2` aus dem Arch-Archiv und
-legt daraus nur die Dateien mit Versionssuffix (`*.so.1.91.0`, 48 Stück) ins
-airootfs. Keine unversionierten Symlinks, also kein Konflikt mit 1.92 — beide
-Sonames liegen nebeneinander. Sobald upstream Calamares gegen 1.92 neu baut,
-kann der Block raus.
-
-### Nach der Installation kein Bootloader
-
-Erster echter Installationslauf: Calamares meldete Erfolg, danach bootete das
-Gerät mit „please install an operating system on your hard disk". Ursache war
-nicht die Partitionierung, sondern die Bootloader-Config: der Paket-Default
-wählt den Bootloader über einen `packagechooser` (Default **limine**). Die
-Offline-Sequenz hat keinen solchen Auswahlschritt, und limine ist gar nicht in
-der ISO — nur `grub`. Also installierte Calamares **keinen** Bootloader.
-
-**Fix:** `cachy-install` legt ein `bootloader.conf`-Override ab, das `grub`
-erzwingt (`efiBootLoader: "grub"`, kein `packagechooser`-Verweis).
-`installEFIFallback` bleibt an — GRUB landet zusätzlich auf dem
-removable-Pfad `/EFI/BOOT/BOOTX64.EFI`, falls die HP-Firmware den
-NVRAM-Eintrag verwirft. Bei der Installation die Option **Gesamte Festplatte
-löschen** wählen, damit überhaupt eine EFI-Partition angelegt wird.
-
-### Schwarzer Schirm, zweiter Anlauf
-
-Der erste GPU-Fix (`gpu-primary.service` setzt `AQ_DRM_DEVICES` über
-`environment.d` und ein greetd-Drop-in) griff auf der echten Hardware nicht.
-Grund: `uwsm` startet Hyprland und baut dessen Umgebung selbst neu auf — es
-reicht diese Variablen nicht an den Compositor durch. Dazu ließ `nvidia_drm`
-mit `fbdev=1` die 4060 einen Framebuffer greifen, obwohl an ihr kein Display
-hängt.
-
-**Fix:** `fbdev=1` → `fbdev=0`, und `gpu-primary-card` schreibt
-`AQ_DRM_DEVICES` zusätzlich in die uwsm-Env-Datei `env-hyprland`, die uwsm
-garantiert liest. Beides hält den Hybridbetrieb (nvidia bleibt für hashcat
-geladen). Auf der Zielhardware noch nicht bestätigt.
-
-### Schwarzer Schirm — die tatsächliche Ursache (per SSH auf der Hardware)
-
-Die vorherigen GPU-Anläufe (`gpu-primary.service`, `AQ_DRM_DEVICES`, `fbdev=0`)
-lagen daneben. Über SSH in die laufende Live-Sitzung zeigte sich der wahre
-Grund: die einzige DRM-Karte war `simple-framebuffer` — **amdgpu lud gar
-nicht**:
-
-```
-amdgpu 0000:05:00.0: Direct firmware load for amdgpu/gc_11_0_1_mes.bin failed, error -2
-amdgpu 0000:05:00.0: Fatal error during GPU init
-```
-
-Nicht die 4060 stahl den Schirm — die 780M bekam nie einen Treiber. Das
-PKGBUILD baute amdgpu mit `scripts/config -e DRM_AMDGPU` als **builtin** (`=y`).
-Builtin initialisiert amdgpu, bevor das Wurzel-FS steht; die Firmware
-(`.zst`, korrekt vom Kernel dekomprimierbar) ist dann noch nicht erreichbar →
-Abbruch → Rückfall auf `simple-framebuffer`. Als **Modul** (`=m`, wie in
-linux-cachyos) lädt amdgpu über udev, wenn `/lib/firmware` da ist.
-
-**Fix:** `-e DRM_AMDGPU` → `-m`. Im installierten System ziehen die
-mkinitcpio-Hooks `autodetect` + `kms` amdgpu samt Firmware früh ins initramfs.
-`verify-kernel-config.sh` erwartete fälschlich `=y` und hatte den Fehler als
-„37/37 ok" verdeckt — jetzt erwartet es `=m`.
-
-Im gebauten Kernel und in der ISO verifiziert: `CONFIG_DRM_AMDGPU=m`,
-`amdgpu.ko` als Modul vorhanden, nicht in `modules.builtin`, Firmware
-`gc_11_0_1_mes*.bin.zst` present. Der endgültige Beweis ist erst der Boot auf
-dem Gerät.
-
-## Auf der echten Hardware verifiziert (per SSH, Live-Sitzung)
-
-Nach dem amdgpu- und AQ_DRM-Fix lief die Live-Sitzung auf dem Victus. Damit
-konnte endlich das geprueft werden, was QEMU nie zeigen konnte:
-
-| Prüfung | Ergebnis |
-|---|---|
-| Kernel `7.2.3-1-leon`, PREEMPT_DYNAMIC | `(full) lazy` |
-| `kernel.sched_bore` | `1` |
-| LSM-Kette | `lockdown,capability,landlock,yama,apparmor,bpf` |
-| BTF, THP, TCP, zram, MGLRU | vorhanden / madvise / bbr+fq / zstd 16G / an |
+| BTF / THP / TCP / zram / MGLRU | da / madvise / bbr+fq / zstd 16G / an |
 | yama/perf/kptr/inotify | `1 / 1 / 1 / 524288` |
-| **NVIDIA 4060**, Treiber 610.57.04 | `nvidia-smi` ok, 8 GB |
-| **CUDA 13.3 in hashcat** | 4060 als Backend-Device erkannt |
-| **amdgpu 780M** | treibt eDP-1 @144 Hz |
-| **hp-wmi Victus `8C9C`** | nativ erkannt: `platform_profile` (low-power/balanced/performance), Lüfter-RPM, BIOS F.15 |
+| NVIDIA 4060 | Treiber 610.57.04, 8 GB, CUDA 13.3 in hashcat |
+| amdgpu 780M | treibt eDP-1 @144 Hz |
+| hp-wmi Victus `8C9C` | nativ: platform_profile (3 Modi), Lüfter-RPM, BIOS F.15 |
 
-Die offene Frage aus `victus-16-s.md` — ob die Board-ID dem Treiber bekannt ist —
-ist damit positiv beantwortet: **8C9C wird nativ unterstützt**, kein nbfc nötig.
+Damit ist die offene Frage aus `victus-16-s.md` beantwortet: **8C9C wird nativ
+unterstützt**, kein nbfc nötig.
 
-### Bekannte Lücke: 780M ohne OpenCL/ROCm
+## Auf echter Hardware gefunden und gefixt
 
-`clinfo` zeigt nur die NVIDIA-CUDA-Plattform; die 780M taucht als OpenCL-Gerät
-nicht auf. Ursache ist Userspace, nicht der Kernel (HSA_AMD ist gebaut): es
-fehlt `rocm-opencl-runtime` bzw. eine rusticl-ICD. Bewusst **nicht** nachgezogen:
-die 780M (gfx1103) ist von ROCm offiziell nicht unterstützt und braucht einen
-`HSA_OVERRIDE_GFX_VERSION`-Hack; gegenüber der 4060 ist der Nutzen für hashcat
-vernachlässigbar. hashcat läuft auf der 4060 (CUDA).
+- **Schwarzer Schirm.** amdgpu (780M) lud gar nicht — das PKGBUILD baute es als
+  builtin (`-e DRM_AMDGPU`), builtin startet vor dem Wurzel-FS und findet seine
+  Firmware nicht. Fix: als Modul bauen (`-m`). Dazu muss `AQ_DRM_DEVICES` auf
+  den echten Node `/dev/dri/cardN` zeigen (nicht den by-path-Symlink), sonst
+  stürzt Hyprland mit `CBackend::create() failed!` ab. Beides erledigt
+  `gpu-primary.service`.
+- **Installer startete nicht** (`Testing-ISO`): `/etc/version-tag` fehlte,
+  `build-iso.sh` schreibt es jetzt.
+- **Calamares stürzte ab** (boost-Soname): calamares-next ist gegen boost 1.91
+  gelinkt, das Repo liefert 1.92 — die 1.91-Libs werden beigelegt.
+- **Kein Bootloader nach Installation**: Calamares wollte limine (Paket-Default,
+  nicht installiert); ein Override erzwingt grub.
 
-## Was ungetestet blieb
+## Zwei Annahmen, die falsch waren
 
-NVIDIA-Modul laden, CUDA und hashcat auf der 4060, `hp-wmi`-Bindung samt
-Lüftersteuerung und `platform_profile`, PRIME-Offload und D3cold — dafür
-braucht es die echte Hardware, QEMU hat weder NVIDIA-GPU noch HP-Board.
+**Der znver4-Kernel bootet auf Zen 2.** Er wird mit `-mno-sse -mno-mmx -mno-avx`
+übersetzt, `-march` wirkt nur auf Scheduling und skalare Befehle. Der echte
+Zielkernel ist also lokal testbar.
 
-Die Calamares-Installation auf eine Platte habe ich nicht durchgespielt, und
-`virtualbox-host-dkms` baut erst beim ersten `postinstall-8845hs`.
+**`vm.swappiness` kommt per udev, nicht per sysctl.** `30-zram.rules` aus
+cachyos-settings setzt `150` nach `systemd-sysctl` und gewinnt immer. Die
+wirkungslose Zeile aus `99-leon.conf` ist raus.
 
-Auch der Fix am primären DRM-Gerät ist bislang nur hergeleitet, nicht am Gerät
-bestätigt: dass `AQ_DRM_DEVICES` gesetzt ist, lässt sich prüfen — dass damit
-alle Boots durchlaufen, zeigt erst eine Reihe von Neustarts.
+## Bekannte Lücke: 780M ohne OpenCL
+
+`clinfo` zeigt nur die NVIDIA-CUDA-Plattform. Der Kernel kann ROCm (HSA_AMD),
+aber der Userspace fehlt (`rocm-opencl-runtime`). Bewusst nicht nachgezogen: die
+780M (gfx1103) ist von ROCm nicht offiziell unterstützt, und gegenüber der 4060
+lohnt es für hashcat nicht. hashcat läuft auf der 4060.
+
+## Ungetestet
+
+Die Calamares-Installation auf eine echte Platte samt erstem Boot des
+installierten Systems, PRIME-Offload und D3cold unter Last, und ob
+`virtualbox-host-dkms` beim ersten `postinstall-8845hs` durchbaut.
